@@ -8,8 +8,11 @@ export default function Header({
   profileOpen,
   setProfileOpen,
   setLoginModal,
+  onOpenAddProduct,
+  requestsCount = 0,
 }) {
   const { user, logout } = useAuth();
+  const isStoreOwner = user?.role === "store_owner";
 
   const handleLogout = () => {
     logout();
@@ -28,6 +31,11 @@ export default function Header({
       <nav>
         <button onClick={() => setPage("home")}>Home</button>
         <button onClick={goProducts}>Products</button>
+        {isStoreOwner && (
+          <button onClick={() => setPage("store-requests")}>
+            Bag Requests {requestsCount > 0 && <span className="req-bubble">{requestsCount}</span>}
+          </button>
+        )}
         <button
           onClick={() => {
             setPage("home");
@@ -43,8 +51,33 @@ export default function Header({
 
       {/* RIGHT SIDE ACTIONS */}
       <div className="actions">
-        {/* BAG IT BADGE */}
-        {user && (
+        {/* STORE OWNER: ADD PRODUCT & REQUESTS QUICK ACTION */}
+        {isStoreOwner && (
+          <>
+            <button
+              className="pill"
+              onClick={onOpenAddProduct}
+              style={{
+                background: "var(--accent, #e5a93b)",
+                color: "#000",
+                fontWeight: "600",
+                border: "none",
+              }}
+            >
+              + Add Product
+            </button>
+            <button
+              className="pill"
+              onClick={() => setPage("store-requests")}
+              style={{ background: "#222" }}
+            >
+              Requests <i>{requestsCount}</i>
+            </button>
+          </>
+        )}
+
+        {/* CUSTOMER: BAG IT BADGE (ONLY FOR CUSTOMERS) */}
+        {!isStoreOwner && user && (
           <button className="pill" onClick={() => setPage("cart")}>
             Bag It <i>{cartCount}</i>
           </button>
@@ -63,12 +96,49 @@ export default function Header({
           <div className="menu">
             {user ? (
               <>
-                <strong>{user.first_name ? `${user.first_name} ${user.last_name || ""}` : user.username}</strong>
-                <small>{user.role === "store_owner" ? "Store Owner" : "Customer"}</small>
+                <strong>
+                  {user.first_name ? `${user.first_name} ${user.last_name || ""}` : user.username}
+                </strong>
+                <small>{isStoreOwner ? "Store Owner" : "Customer"}</small>
 
-                <button onClick={() => { setPage("cart"); setProfileOpen(false); }}>
-                  My Bag It
-                </button>
+                {isStoreOwner ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setPage("store-requests");
+                        setProfileOpen(false);
+                      }}
+                    >
+                      Customer Requests ({requestsCount})
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPage("products");
+                        setProfileOpen(false);
+                      }}
+                    >
+                      Manage Products
+                    </button>
+                    <button
+                      onClick={() => {
+                        onOpenAddProduct();
+                        setProfileOpen(false);
+                      }}
+                    >
+                      + Add New Product
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setPage("cart");
+                      setProfileOpen(false);
+                    }}
+                  >
+                    My Bag It
+                  </button>
+                )}
+
                 <button onClick={handleLogout}>Logout</button>
               </>
             ) : (

@@ -142,7 +142,7 @@ nav button,
     box-shadow: 0 20px 45px #0002;
 }
 
-.menu > * {
+.menu>* {
     display: block;
 }
 
@@ -385,19 +385,15 @@ h2 em {
     flex-direction: column;
     justify-content: space-between;
     font-size: 11px;
-    background: linear-gradient(
-        135deg,
-        #8e6a78,
-        #4e3a4c
-    );
+    background: linear-gradient(135deg,
+            #8e6a78,
+            #4e3a4c);
 }
 
 .tiles div:nth-child(2) {
-    background: linear-gradient(
-        135deg,
-        #697988,
-        #303840
-    );
+    background: linear-gradient(135deg,
+            #697988,
+            #303840);
 }
 
 
@@ -448,7 +444,7 @@ h2 em {
     margin: 12px 0;
 }
 
-.page > p {
+.page>p {
     color: var(--muted);
     line-height: 1.6;
 }
@@ -538,7 +534,7 @@ h2 em {
     margin: 0 3px 10px;
 }
 
-.product > strong {
+.product>strong {
     display: block;
     margin: 0 3px 12px;
 }
@@ -546,7 +542,7 @@ h2 em {
 
 /* Product Bag It button */
 
-.product > button {
+.product>button {
     width: 100%;
     padding: 11px;
     border: 1px solid var(--ink);
@@ -555,7 +551,7 @@ h2 em {
     font-weight: 700;
 }
 
-.product > button:hover {
+.product>button:hover {
     background: var(--ink);
     color: #fff;
 }
@@ -651,7 +647,7 @@ h2 em {
     margin-top: 10px;
 }
 
-.modal > small {
+.modal>small {
     display: block;
     color: var(--muted);
     font-size: 10px;
@@ -734,4 +730,66 @@ footer p {
     .page h1 {
         font-size: 48px;
     }
+}
+
+/* =========================================================
+   STORE OWNER & BAG REQUEST ENHANCEMENTS
+========================================================= */
+
+.req-bubble {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ff4757;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.error-badge {
+    background: rgba(255, 71, 87, 0.15);
+    border: 1px solid rgba(255, 71, 87, 0.4);
+    color: #ff6b81;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 14px;
+}
+
+.add-product-modal .form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+}
+
+.add-product-modal .form-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #bbb;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.add-product-modal input,
+.add-product-modal select {
+    background: #222;
+    border: 1px solid #333;
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.add-product-modal input:focus,
+.add-product-modal select:focus {
+    border-color: var(--accent, #e5a93b);
 }
