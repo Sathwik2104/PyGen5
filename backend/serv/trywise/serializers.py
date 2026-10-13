@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from .models import Product, Order, OrderItem
 
 User = get_user_model()
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,3 +65,128 @@ class RegisterSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     email_or_username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
+
+# ==============================================================================
+# PRODUCT SERIALIZERS
+# ==============================================================================
+
+class ProductSerializer(serializers.ModelSerializer):
+    """
+    ProductSerializer:
+    Handles reading and creating products.
+    Includes inventory counts per size (size_s, size_m, size_l, size_xl)
+    and computed total_stock.
+    """
+    created_by_name = serializers.ReadOnlyField(source='created_by.username')
+    total_stock = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Product
+        fields = (
+            'id',
+            'name',
+            'category',
+            'price',
+            'image',
+            'size_s',
+            'size_m',
+            'size_l',
+            'size_xl',
+            'total_stock',
+            'created_by',
+            'created_by_name',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'created_by', 'created_by_name', 'created_at', 'updated_at')
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        return value
+
+
+# ==============================================================================
+# ORDER / BAG IT REQUEST SERIALIZERS
+# ==============================================================================
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    product_category = serializers.ReadOnlyField(source='product.category')
+    product_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrderItem
+        fields = (
+            'id',
+            'product',
+            'product_name',
+            'product_category',
+            'product_image',
+            'size',
+            'quantity',
+            'price',
+        )
+
+    def get_product_image(self, obj):
+        request = self.context.get('request')
+        if obj.product.image and hasattr(obj.product.image, 'url'):
+            if request:
+                return request.build_absolute_uri(obj.product.image.url)
+            return obj.product.image.url
+        return None
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    """
+    OrderSerializer:
+    Reads order details, customer contact info, and nested item line-items.
+    """
+    items = OrderItemSerializer(many=True, read_only=True)
+    customer_username = serializers.ReadOnlyField(source='customer.username')
+    customer_name = serializers.SerializerMethodField()
+    customer_email = serializers.ReadOnlyField(source='customer.email')
+    customer_phone = serializers.ReadOnlyField(source='customer.phone_number')
+
+    class Meta:
+        model = Order
+        fields = (
+            'id',
+            'customer',
+            'customer_username',
+            'customer_name',
+            'customer_email',
+            'customer_phone',
+            'total_price',
+            'status',
+            'items',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'customer', 'total_price', 'created_at', 'updated_at')
+
+    def get_customer_name(self, obj):
+        full = f"{obj.customer.first_name} {obj.customer.last_name}".strip()
+        return full if full else obj.customer.username
+
+
+class CreateOrderItemInputSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField()
+    size = serializers.ChoiceField(choices=['S', 'M', 'L', 'XL'])
+    quantity = serializers.IntegerField(min_value=1, default=1)
+
+
+class CreateOrderSerializer(serializers.Serializer):
+    """
+    CreateOrderSerializer:
+    Accepts list of items, validates live inventory for the selected size,
+    atomically decrements the stock, and records the order.
+    """
+    items = CreateOrderItemInputSerializer(many=True)
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("Your bag cannot be empty.")
+        return value
+
