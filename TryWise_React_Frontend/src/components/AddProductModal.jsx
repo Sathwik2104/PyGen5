@@ -96,7 +96,7 @@ export default function AddProductModal({ close, onProductAdded }) {
 
         <label>STORE OWNER PORTAL</label>
         <h2>Add New Product</h2>
-        <p style={{ margin: "0 0 16px 0", color: "#888", fontSize: "0.9rem" }}>
+        <p style={{ margin: "0 0 16px 0", color: "var(--muted)", fontSize: "0.9rem" }}>
           Provide collection details, size stocks, and a product photo.
         </p>
 
@@ -126,14 +126,6 @@ export default function AddProductModal({ close, onProductAdded }) {
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background: "#222",
-                  color: "#fff",
-                  border: "1px solid #444",
-                }}
               >
                 <option value="Men">Men</option>
                 <option value="Women">Women</option>
@@ -162,48 +154,44 @@ export default function AddProductModal({ close, onProductAdded }) {
               Initial Size Stock Counts (Units in Store)
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
-              <div>
-                <span style={{ fontSize: "0.8rem", color: "#aaa" }}>Size S</span>
+              <div className="size-input-box">
+                <span>Size S</span>
                 <input
                   type="number"
                   name="size_s"
                   value={formData.size_s}
                   onChange={handleChange}
                   min="0"
-                  style={{ textAlign: "center", padding: "8px" }}
                 />
               </div>
-              <div>
-                <span style={{ fontSize: "0.8rem", color: "#aaa" }}>Size M</span>
+              <div className="size-input-box">
+                <span>Size M</span>
                 <input
                   type="number"
                   name="size_m"
                   value={formData.size_m}
                   onChange={handleChange}
                   min="0"
-                  style={{ textAlign: "center", padding: "8px" }}
                 />
               </div>
-              <div>
-                <span style={{ fontSize: "0.8rem", color: "#aaa" }}>Size L</span>
+              <div className="size-input-box">
+                <span>Size L</span>
                 <input
                   type="number"
                   name="size_l"
                   value={formData.size_l}
                   onChange={handleChange}
                   min="0"
-                  style={{ textAlign: "center", padding: "8px" }}
                 />
               </div>
-              <div>
-                <span style={{ fontSize: "0.8rem", color: "#aaa" }}>Size XL</span>
+              <div className="size-input-box">
+                <span>Size XL</span>
                 <input
                   type="number"
                   name="size_xl"
                   value={formData.size_xl}
                   onChange={handleChange}
                   min="0"
-                  style={{ textAlign: "center", padding: "8px" }}
                 />
               </div>
             </div>
@@ -221,7 +209,7 @@ export default function AddProductModal({ close, onProductAdded }) {
                 display: "block",
                 padding: "8px 0",
                 fontSize: "0.9rem",
-                color: "#ccc",
+                color: "var(--ink)",
               }}
             />
 
@@ -229,14 +217,14 @@ export default function AddProductModal({ close, onProductAdded }) {
               <div
                 style={{
                   marginTop: "8px",
-                  borderRadius: "8px",
+                  borderRadius: "10px",
                   overflow: "hidden",
                   width: "100%",
                   maxHeight: "150px",
-                  border: "1px solid #333",
+                  border: "1px solid var(--line)",
                   display: "flex",
                   justifyContent: "center",
-                  background: "#111",
+                  background: "var(--paper)",
                 }}
               >
                 <img

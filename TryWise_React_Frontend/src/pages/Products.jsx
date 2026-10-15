@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { fetchProducts, updateProductStock, deleteProduct } from "../services/api.js";
 import ImageModal from "../components/ImageModal.jsx";
+import { recordProductVisit } from "../services/recentHistory.js";
 
 /**
  * Products Page Component:
@@ -11,7 +12,7 @@ import ImageModal from "../components/ImageModal.jsx";
  *   use inline [+] / [-] buttons to instantly adjust stock, add new products,
  *   or delete items.
  */
-export default function Products({ category, setCategory, addToCart, onOpenAddProduct }) {
+export default function Products({ category, setCategory, addToCart, onOpenAddProduct, onOpenLogin }) {
   const { user, tokens } = useAuth();
   const isStoreOwner = user?.role === "store_owner";
 
@@ -28,11 +29,16 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   // Stock updating loader indicator per product
   const [stockUpdating, setStockUpdating] = useState({});
 
+  const activeCategory =
+    typeof category === "string" && (category === "Women" || category === "Men")
+      ? category
+      : "All";
+
   const loadProducts = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchProducts(category);
+      const data = await fetchProducts(activeCategory);
       setProducts(data);
 
       // Initialize default selected size for each product (pick first available in-stock size)
@@ -51,15 +57,18 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   };
 
   useEffect(() => {
-    loadProducts();
-  }, [category]);
+    if (user) {
+      loadProducts();
+    }
+  }, [category, user]);
 
   // Handle customer choosing a size
-  const handleSelectSize = (productId, size) => {
+  const handleSelectSize = (product, size) => {
     setSelectedSizes((prev) => ({
       ...prev,
-      [productId]: size,
+      [product.id]: size,
     }));
+    recordProductVisit(product);
   };
 
   // Store Owner: Quick inline stock adjustment
@@ -119,17 +128,38 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
     return { status: "in_stock", text: `In Stock (Size ${size})`, isAvailable: true, count };
   };
 
+  // Guard: unauthenticated guests must sign in to browse collection
+  if (!user) {
+    return (
+      <main className="page" style={{ maxWidth: "600px", margin: "60px auto", textAlign: "center" }}>
+        <div className="empty" style={{ padding: "50px 30px" }}>
+          <div style={{ fontSize: "2.8rem", marginBottom: "12px" }}>🔒</div>
+          <label>MEMBERS EXCLUSIVE</label>
+          <h2 style={{ fontSize: "28px", margin: "12px 0 8px" }}>Sign In to Explore Collection</h2>
+          <p style={{ color: "var(--muted)", marginBottom: "24px", lineHeight: "1.6" }}>
+            Log in to view the full TryWise collection, check real-time store inventory, and Bag It for in-store trial.
+          </p>
+          <button
+            className="primary"
+            onClick={() => onOpenLogin && onOpenLogin("customer")}
+            style={{ padding: "12px 28px", borderRadius: "25px" }}
+          >
+            Log In as Customer ↗
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="page" style={{ maxWidth: "1200px", margin: "0 auto", padding: "24px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px" }}>
+    <main className="page" style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 6vw" }}>
+      <div className="products-header">
         <div>
-          <label style={{ fontSize: "0.85rem", letterSpacing: "1px", color: "var(--accent, #e5a93b)" }}>
-            TRYWISE COLLECTION
-          </label>
-          <h1 style={{ margin: "4px 0" }}>
+          <label>TRYWISE COLLECTION</label>
+          <h1>
             Products <em>you'll want.</em>
           </h1>
-          <p style={{ color: "#888", margin: 0 }}>
+          <p>
             {isStoreOwner
               ? "Manage store inventory, adjust size counts, and add new products."
               : "Browse the collection and Bag It before your store visit."}
@@ -138,27 +168,18 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
 
         {/* STORE OWNER ACTION: ADD PRODUCT BUTTON */}
         {isStoreOwner && (
-          <button
-            className="primary"
-            onClick={onOpenAddProduct}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "24px",
-              fontWeight: "600",
-              boxShadow: "0 4px 14px rgba(229, 169, 59, 0.3)",
-            }}
-          >
+          <button className="primary" onClick={onOpenAddProduct}>
             + Add New Product
           </button>
         )}
       </div>
 
       {/* FILTERS */}
-      <div className="filters" style={{ margin: "24px 0" }}>
+      <div className="filters">
         {["All", "Women", "Men"].map((item) => (
           <button
             key={item}
-            className={category === item ? "sel" : ""}
+            className={activeCategory === item ? "sel" : ""}
             onClick={() => setCategory(item)}
           >
             {item}
@@ -166,16 +187,18 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
         ))}
       </div>
 
-      {loading && <p style={{ color: "#aaa" }}>Loading collection...</p>}
+      {loading && <p style={{ color: "var(--muted)", margin: "20px 0" }}>Loading collection...</p>}
       {error && <div className="error-badge">{error}</div>}
 
       {!loading && products.length === 0 && (
-        <div className="empty" style={{ padding: "40px 20px", textAlign: "center", background: "#181818", borderRadius: "12px" }}>
-          No products found in this category.
-          <br />
-          <small style={{ color: "#777" }}>
-            {isStoreOwner ? "Click '+ Add New Product' above to stock your store!" : "Check back soon for new arrivals."}
-          </small>
+        <div className="empty">
+          <div className="empty-icon">🛍</div>
+          <div className="empty-title">No products found in this category.</div>
+          <div className="empty-text">
+            {isStoreOwner
+              ? "Click '+ Add New Product' above to stock your store!"
+              : "Check back soon for new arrivals."}
+          </div>
         </div>
       )}
 
@@ -186,208 +209,97 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
           const stockInfo = getStockInfo(product, currentSize);
 
           return (
-            <article
-              className="product"
-              key={product.id}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                background: "var(--card, #1c1c1c)",
-                borderRadius: "14px",
-                overflow: "hidden",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-              }}
-            >
+            <article className="product-card" key={product.id}>
               {/* IMAGE / THUMBNAIL (CLICK TO ZOOM) */}
               <div
-                className="pic"
-                onClick={() =>
-                  product.image &&
-                  setPreviewImage({
-                    url: product.image,
-                    title: product.name,
-                  })
-                }
-                style={{
-                  cursor: product.image ? "pointer" : "default",
-                  position: "relative",
-                  height: "220px",
-                  background: "#111",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                className={`product-img-box ${product.image ? "clickable" : ""}`}
+                onClick={() => {
+                  recordProductVisit(product);
+                  if (product.image) {
+                    setPreviewImage({
+                      url: product.image,
+                      title: product.name,
+                    });
+                  }
                 }}
               >
                 {product.image ? (
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                  />
+                  <img src={product.image} alt={product.name} />
                 ) : (
-                  <b style={{ fontSize: "2.5rem", color: "#444" }}>◈</b>
+                  <span className="product-placeholder">◈</span>
                 )}
 
-                <small
-                  style={{
-                    position: "absolute",
-                    top: "12px",
-                    left: "12px",
-                    background: "rgba(0, 0, 0, 0.75)",
-                    padding: "4px 10px",
-                    borderRadius: "12px",
-                    fontSize: "0.75rem",
-                    color: "#fff",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {product.category}
-                </small>
+                <span className="badge-category">{product.category}</span>
 
                 {product.image && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      bottom: "10px",
-                      right: "10px",
-                      background: "rgba(0,0,0,0.6)",
-                      color: "#fff",
-                      fontSize: "0.75rem",
-                      padding: "2px 8px",
-                      borderRadius: "6px",
-                    }}
-                  >
-                    🔍 Zoom
-                  </span>
+                  <span className="badge-zoom">🔍 Zoom</span>
                 )}
               </div>
 
               {/* CARD DETAILS */}
-              <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <h3 style={{ margin: "0 0 6px 0", fontSize: "1.1rem", color: "#fff" }}>
-                    {product.name}
-                  </h3>
-                  <strong style={{ fontSize: "1.15rem", color: "var(--accent, #e5a93b)", whiteSpace: "nowrap" }}>
+              <div className="product-info">
+                <div className="product-title-row">
+                  <h3 className="product-title">{product.name}</h3>
+                  <span className="product-price-tag">
                     ₹{Number(product.price).toLocaleString("en-IN")}
-                  </strong>
+                  </span>
                 </div>
 
-                {/* ============================================================== */}
                 {/* STORE OWNER CONTROLS (FULL INVENTORY TRANSPARENCY & ADJUSTERS) */}
-                {/* ============================================================== */}
                 {isStoreOwner ? (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "10px",
-                      background: "#141414",
-                      borderRadius: "8px",
-                      border: "1px solid #333",
-                    }}
-                  >
-                    <span style={{ fontSize: "0.8rem", color: "#aaa", display: "block", marginBottom: "6px" }}>
-                      Manage Size Stock (In Store):
-                    </span>
+                  <div className="store-inventory-panel">
+                    <div className="store-inv-header">
+                      <span>Manage Size Stock</span>
+                      <button
+                        onClick={() => handleDeleteProduct(product.id, product.name)}
+                        className="product-delete-btn"
+                        title="Delete product"
+                      >
+                        🗑 Delete
+                      </button>
+                    </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+                    <div className="inventory-grid">
                       {[
                         { label: "S", key: "size_s" },
                         { label: "M", key: "size_m" },
                         { label: "L", key: "size_l" },
                         { label: "XL", key: "size_xl" },
-                      ].map(({ label, key }) => (
-                        <div
-                          key={key}
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            background: "#222",
-                            padding: "4px",
-                            borderRadius: "6px",
-                          }}
-                        >
-                          <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "#fff" }}>
-                            {label}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "0.95rem",
-                              fontWeight: "600",
-                              color: product[key] === 0 ? "#f44336" : product[key] < 5 ? "#ff9800" : "#4caf50",
-                            }}
-                          >
-                            {product[key]}
-                          </span>
-                          <div style={{ display: "flex", gap: "2px", marginTop: "4px" }}>
-                            <button
-                              onClick={() => handleStockChange(product.id, key, -1)}
-                              disabled={product[key] <= 0 || stockUpdating[`${product.id}_${key}`]}
-                              style={{
-                                width: "20px",
-                                height: "20px",
-                                padding: 0,
-                                fontSize: "0.75rem",
-                                borderRadius: "3px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "none",
-                                cursor: "pointer",
-                              }}
-                            >
-                              -
-                            </button>
-                            <button
-                              onClick={() => handleStockChange(product.id, key, 1)}
-                              disabled={stockUpdating[`${product.id}_${key}`]}
-                              style={{
-                                width: "20px",
-                                height: "20px",
-                                padding: 0,
-                                fontSize: "0.75rem",
-                                borderRadius: "3px",
-                                background: "#444",
-                                color: "#fff",
-                                border: "none",
-                                cursor: "pointer",
-                              }}
-                            >
-                              +
-                            </button>
+                      ].map(({ label, key }) => {
+                        const qty = product[key] || 0;
+                        const statusClass = qty === 0 ? "zero" : qty < 5 ? "low" : "ok";
+                        return (
+                          <div key={key} className="inventory-cell">
+                            <span className="inv-size-tag">{label}</span>
+                            <span className={`inv-qty-num ${statusClass}`}>{qty}</span>
+                            <div className="inv-stepper-row">
+                              <button
+                                className="inv-step-btn"
+                                onClick={() => handleStockChange(product.id, key, -1)}
+                                disabled={qty <= 0 || stockUpdating[`${product.id}_${key}`]}
+                                title="Decrease stock"
+                              >
+                                -
+                              </button>
+                              <button
+                                className="inv-step-btn"
+                                onClick={() => handleStockChange(product.id, key, 1)}
+                                disabled={stockUpdating[`${product.id}_${key}`]}
+                                title="Increase stock"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ marginTop: "10px", display: "flex", justifyContent: "flex-end" }}>
-                      <button
-                        onClick={() => handleDeleteProduct(product.id, product.name)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#ff5252",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                          padding: "2px 6px",
-                        }}
-                      >
-                        🗑 Delete Product
-                      </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
-                  /* ============================================================== */
-                  /* CUSTOMER CONTROLS (SIZE SELECTOR & URGENCY STOCK BADGES)      */
-                  /* ============================================================== */
-                  <div style={{ marginTop: "auto", paddingTop: "12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-                      <span style={{ fontSize: "0.8rem", color: "#aaa" }}>Select Size:</span>
+                  /* CUSTOMER CONTROLS (SIZE SELECTOR & URGENCY STOCK BADGES) */
+                  <div className="size-selector-wrap">
+                    <span className="size-selector-label">Select Size:</span>
+                    <div className="size-btn-group">
                       {["S", "M", "L", "XL"].map((size) => {
                         const count = product[`size_${size.toLowerCase()}`] || 0;
                         const isOut = count === 0;
@@ -396,22 +308,10 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
                         return (
                           <button
                             key={size}
-                            onClick={() => !isOut && handleSelectSize(product.id, size)}
+                            onClick={() => !isOut && handleSelectSize(product, size)}
                             disabled={isOut}
-                            title={isOut ? "Out of Stock" : `Select Size ${size}`}
-                            style={{
-                              width: "32px",
-                              height: "32px",
-                              padding: 0,
-                              borderRadius: "6px",
-                              fontSize: "0.85rem",
-                              fontWeight: "600",
-                              background: isSelected ? "var(--accent, #e5a93b)" : isOut ? "#222" : "#2e2e2e",
-                              color: isSelected ? "#000" : isOut ? "#555" : "#fff",
-                              border: isSelected ? "1px solid #fff" : "1px solid #444",
-                              textDecoration: isOut ? "line-through" : "none",
-                              cursor: isOut ? "not-allowed" : "pointer",
-                            }}
+                            title={isOut ? `Size ${size} Out of Stock` : `Select Size ${size}`}
+                            className={`size-picker-btn ${isSelected ? "active" : ""}`}
                           >
                             {size}
                           </button>
@@ -420,28 +320,19 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
                     </div>
 
                     {/* DYNAMIC STOCK VISIBILITY BADGE */}
-                    <div style={{ minHeight: "22px", marginBottom: "10px" }}>
+                    <div className="stock-badge-container">
                       {stockInfo.status === "low_stock" && (
-                        <span
-                          style={{
-                            fontSize: "0.8rem",
-                            color: "#ff9800",
-                            fontWeight: "600",
-                            background: "rgba(255, 152, 0, 0.12)",
-                            padding: "3px 8px",
-                            borderRadius: "4px",
-                          }}
-                        >
+                        <span className="stock-pill low-stock">
                           {stockInfo.text}
                         </span>
                       )}
                       {stockInfo.status === "in_stock" && (
-                        <span style={{ fontSize: "0.8rem", color: "#4caf50", fontWeight: "500" }}>
+                        <span className="stock-pill in-stock">
                           ✓ {stockInfo.text}
                         </span>
                       )}
                       {stockInfo.status === "out_of_stock" && (
-                        <span style={{ fontSize: "0.8rem", color: "#f44336", fontWeight: "500" }}>
+                        <span className="stock-pill out-of-stock">
                           ✕ {stockInfo.text}
                         </span>
                       )}
@@ -449,7 +340,8 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
 
                     {/* + BAG IT BUTTON */}
                     <button
-                      onClick={() =>
+                      onClick={() => {
+                        recordProductVisit(product);
                         addToCart({
                           productId: product.id,
                           name: product.name,
@@ -458,17 +350,10 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
                           image: product.image,
                           size: currentSize,
                           availableStock: product[`size_${currentSize.toLowerCase()}`] || 0,
-                        })
-                      }
-                      disabled={!stockInfo.isAvailable}
-                      className="primary full"
-                      style={{
-                        padding: "10px",
-                        borderRadius: "8px",
-                        fontWeight: "600",
-                        opacity: stockInfo.isAvailable ? 1 : 0.5,
-                        cursor: stockInfo.isAvailable ? "pointer" : "not-allowed",
+                        });
                       }}
+                      disabled={!stockInfo.isAvailable}
+                      className="btn-bag-it"
                     >
                       {stockInfo.isAvailable ? `+ Bag It (Size ${currentSize})` : "Sold Out"}
                     </button>

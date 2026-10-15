@@ -43,8 +43,19 @@ function MainContent() {
     return () => clearInterval(interval);
   }, [user, tokens]);
 
-  const goProducts = () => {
+  const goProducts = (targetCategory = "All") => {
+    if (!user) {
+      setLoginModal("customer");
+      return;
+    }
+    const cat =
+      typeof targetCategory === "string" &&
+      (targetCategory === "Women" || targetCategory === "Men")
+        ? targetCategory
+        : "All";
+    setCategory(cat);
     setPage("products");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Add item to cart with selected size
@@ -91,7 +102,17 @@ function MainContent() {
         requestsCount={pendingRequestsCount}
       />
 
-      {page === "home" && <Home go={goProducts} />}
+      {page === "home" && (
+        <Home
+          go={goProducts}
+          user={user}
+          setPage={setPage}
+          setCategory={setCategory}
+          setLoginModal={setLoginModal}
+          pendingRequestsCount={pendingRequestsCount}
+          onOpenAddProduct={() => setAddProductModal(true)}
+        />
+      )}
 
       {page === "products" && (
         <Products
@@ -99,6 +120,7 @@ function MainContent() {
           setCategory={setCategory}
           addToCart={addToCart}
           onOpenAddProduct={() => setAddProductModal(true)}
+          onOpenLogin={setLoginModal}
         />
       )}
 
@@ -107,10 +129,12 @@ function MainContent() {
           cart={cart}
           setCart={setCart}
           setPage={setPage}
+          goProducts={goProducts}
+          onOpenLogin={setLoginModal}
         />
       )}
 
-      {page === "store-requests" && <StoreRequests />}
+      {page === "store-requests" && <StoreRequests onOpenLogin={setLoginModal} />}
 
       {page === "about" && (
         <Info

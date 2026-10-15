@@ -1,0 +1,194 @@
+[
+{
+  "model": "trywise.user",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$RqTZ4fL8neh7w7HNOWELcK$SXls62v7V99e0cGcNNn4oefOpVk8B+UQ4DKv71pNeho=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "sathwik2104",
+    "first_name": "Sathwik",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-09T09:29:13.236Z",
+    "email": "sathwik2104@gmail.com",
+    "role": "customer",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.user",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$eH1lZ346Sy0D3o74cLNvAJ$NhF7Twu3p0dyvvBcHevV+tehe6+gqaenzw9HStoSImM=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "charishma123",
+    "first_name": "Charishma",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-09T09:38:18.477Z",
+    "email": "charishma123@gmail.com",
+    "role": "store_owner",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.user",
+  "pk": 3,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$e9PkQW7um9wxOUB9aXORc8$oSi8J/DugiJ+VfifR3Au1rXgXbFkmwPu8elRc4FqByg=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "susruthi123",
+    "first_name": "Susruthi",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-09T11:39:42.016Z",
+    "email": "susruthi123@gmail.com",
+    "role": "customer",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.user",
+  "pk": 4,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$YIUxrpwYDxjq2Dl0rOuxNX$uNbylwJ//RM/DmhV9DQQG1eL0toaM1i63koozcp0qbw=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "charishma1234",
+    "first_name": "Charishma",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-15T06:41:36.827Z",
+    "email": "charishma1234@gmail.com",
+    "role": "store_owner",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 1,
+  "fields": {
+    "name": "Satin Evening Dress",
+    "category": "Women",
+    "price": "2499.00",
+    "image": "",
+    "size_s": 6,
+    "size_m": 3,
+    "size_l": 8,
+    "size_xl": 0,
+    "created_by": 2,
+    "created_at": "2026-10-13T06:48:12.484Z",
+    "updated_at": "2026-10-13T06:48:12.484Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 2,
+  "fields": {
+    "name": "Relaxed Linen Shirt",
+    "category": "Men",
+    "price": "1499.00",
+    "image": "",
+    "size_s": 12,
+    "size_m": 4,
+    "size_l": 10,
+    "size_xl": 2,
+    "created_by": 2,
+    "created_at": "2026-10-13T06:48:12.492Z",
+    "updated_at": "2026-10-13T06:48:12.492Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 3,
+  "fields": {
+    "name": "Wide-Leg Jeans",
+    "category": "Women",
+    "price": "1899.00",
+    "image": "",
+    "size_s": 0,
+    "size_m": 7,
+    "size_l": 5,
+    "size_xl": 1,
+    "created_by": 2,
+    "created_at": "2026-10-13T06:48:12.498Z",
+    "updated_at": "2026-10-13T06:53:44.575Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 5,
+  "fields": {
+    "name": "Blush Satin Slip Dress",
+    "category": "Women",
+    "price": "2299.00",
+    "image": "products/WhatsApp_Image_2026-10-12_at_3.49.13_PM.jpeg",
+    "size_s": 0,
+    "size_m": 2,
+    "size_l": 8,
+    "size_xl": 1,
+    "created_by": 2,
+    "created_at": "2026-10-13T07:03:30.032Z",
+    "updated_at": "2026-10-14T06:23:45.520Z"
+  }
+},
+{
+  "model": "trywise.order",
+  "pk": 1,
+  "fields": {
+    "customer": 1,
+    "total_price": "3798.00",
+    "status": "Completed",
+    "created_at": "2026-10-13T06:53:44.579Z",
+    "updated_at": "2026-10-13T06:55:14.726Z"
+  }
+},
+{
+  "model": "trywise.order",
+  "pk": 2,
+  "fields": {
+    "customer": 1,
+    "total_price": "4598.00",
+    "status": "Pending",
+    "created_at": "2026-10-14T06:22:45.827Z",
+    "updated_at": "2026-10-14T06:22:45.827Z"
+  }
+},
+{
+  "model": "trywise.orderitem",
+  "pk": 1,
+  "fields": {
+    "order": 1,
+    "product": 3,
+    "size": "S",
+    "quantity": 2,
+    "price": "1899.00"
+  }
+},
+{
+  "model": "trywise.orderitem",
+  "pk": 2,
+  "fields": {
+    "order": 2,
+    "product": 5,
+    "size": "M",
+    "quantity": 2,
+    "price": "2299.00"
+  }
+}
+]

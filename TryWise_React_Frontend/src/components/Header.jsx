@@ -23,14 +23,14 @@ export default function Header({
   return (
     <header>
       {/* LOGO */}
-      <button className="logo" onClick={() => setPage("home")}>
-        <b>◢</b> TRY<span>WISE</span>
+      <button className="logo-btn" onClick={() => setPage("home")} title="TryWise Home">
+        <img src="/trywise-logo.png" alt="TryWise Shop Smart" className="header-logo-img" />
       </button>
 
       {/* NAVIGATION LINKS */}
       <nav>
         <button onClick={() => setPage("home")}>Home</button>
-        <button onClick={goProducts}>Products</button>
+        <button onClick={() => goProducts("All")}>Products</button>
         {isStoreOwner && (
           <button onClick={() => setPage("store-requests")}>
             Bag Requests {requestsCount > 0 && <span className="req-bubble">{requestsCount}</span>}
@@ -58,9 +58,9 @@ export default function Header({
               className="pill"
               onClick={onOpenAddProduct}
               style={{
-                background: "var(--accent, #e5a93b)",
-                color: "#000",
-                fontWeight: "600",
+                background: "var(--ink)",
+                color: "#fff",
+                fontWeight: "700",
                 border: "none",
               }}
             >
@@ -69,7 +69,6 @@ export default function Header({
             <button
               className="pill"
               onClick={() => setPage("store-requests")}
-              style={{ background: "#222" }}
             >
               Requests <i>{requestsCount}</i>
             </button>
@@ -113,7 +112,7 @@ export default function Header({
                     </button>
                     <button
                       onClick={() => {
-                        setPage("products");
+                        goProducts("All");
                         setProfileOpen(false);
                       }}
                     >

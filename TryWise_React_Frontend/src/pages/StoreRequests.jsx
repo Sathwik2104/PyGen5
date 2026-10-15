@@ -8,8 +8,8 @@ import ImageModal from "../components/ImageModal.jsx";
  * Dedicated dashboard for Store Owners to view customer "Bag It" requests,
  * inspect requested clothing sizes/quantities, and update order statuses.
  */
-export default function StoreRequests() {
-  const { tokens } = useAuth();
+export default function StoreRequests({ onOpenLogin }) {
+  const { user, tokens } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -51,100 +51,81 @@ export default function StoreRequests() {
     }
   };
 
+  if (!user || user.role !== "store_owner") {
+    return (
+      <main className="page" style={{ maxWidth: "600px", margin: "60px auto", textAlign: "center", padding: "40px 24px" }}>
+        <div style={{ fontSize: "56px", marginBottom: "16px" }}>🔒</div>
+        <h2>Store Owner Access Only</h2>
+        <p style={{ color: "var(--muted)", margin: "12px 0 24px", lineHeight: "1.6" }}>
+          This portal is reserved for registered store owners to manage customer trial requests. Please sign in with your store owner credentials.
+        </p>
+        <button
+          className="primary"
+          onClick={() => onOpenLogin && onOpenLogin("store_owner")}
+        >
+          Sign In as Store Owner ↗
+        </button>
+      </main>
+    );
+  }
+
   return (
-    <main className="page" style={{ maxWidth: "1000px", margin: "0 auto", padding: "24px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+    <main className="page" style={{ maxWidth: "1040px", margin: "0 auto", padding: "40px 6vw" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px", marginBottom: "28px" }}>
         <div>
-          <label style={{ fontSize: "0.85rem", letterSpacing: "1px", color: "var(--accent, #e5a93b)" }}>
-            STORE OWNER DASHBOARD
-          </label>
-          <h1 style={{ margin: "4px 0" }}>
+          <label>STORE OWNER DASHBOARD</label>
+          <h1 style={{ margin: "4px 0 10px 0" }}>
             Customer <em>Bag Requests.</em>
           </h1>
-          <p style={{ color: "#888", margin: 0 }}>
+          <p style={{ color: "var(--muted)", margin: 0 }}>
             Review incoming in-store trial requests and prepare sizes for customers.
           </p>
         </div>
         <button
           onClick={loadOrders}
           className="secondary"
-          style={{ padding: "8px 16px", borderRadius: "8px" }}
+          style={{ padding: "10px 20px" }}
         >
           ↻ Refresh
         </button>
       </div>
 
-      {loading && <p style={{ color: "#aaa" }}>Loading requests...</p>}
+      {loading && <p style={{ color: "var(--muted)", margin: "20px 0" }}>Loading requests...</p>}
       {error && <div className="error-badge">{error}</div>}
 
       {!loading && orders.length === 0 && (
-        <div className="empty" style={{ padding: "40px 20px", textAlign: "center", background: "#181818", borderRadius: "12px" }}>
-          No Bag It requests received yet.
-          <br />
-          <small style={{ color: "#777" }}>Customer requests will appear here in real-time.</small>
+        <div className="empty">
+          <div className="empty-icon">📋</div>
+          <div className="empty-title">No Bag It requests received yet.</div>
+          <div className="empty-text">Customer requests will appear here in real-time.</div>
         </div>
       )}
 
       {/* ORDERS LIST */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div>
         {orders.map((order) => (
-          <article
-            key={order.id}
-            style={{
-              background: "var(--card, #1c1c1c)",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              borderRadius: "14px",
-              padding: "20px",
-            }}
-          >
+          <article key={order.id} className="order-card">
             {/* ORDER HEADER */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                paddingBottom: "14px",
-                marginBottom: "14px",
-                flexWrap: "wrap",
-                gap: "12px",
-              }}
-            >
+            <div className="order-card-header">
               <div>
-                <strong style={{ fontSize: "1.1rem", color: "#fff" }}>
-                  Request #{order.id}
-                </strong>
-                <div style={{ fontSize: "0.85rem", color: "#aaa", marginTop: "4px" }}>
-                  Customer: <span style={{ color: "#fff" }}>{order.customer_name}</span> ({order.customer_email})
+                <h3 className="order-id-title">Request #{order.id}</h3>
+                <div className="order-customer-meta">
+                  Customer: <strong>{order.customer_name}</strong> ({order.customer_email})
                   {order.customer_phone && ` • Phone: ${order.customer_phone}`}
                 </div>
-                <div style={{ fontSize: "0.8rem", color: "#777", marginTop: "2px" }}>
+                <div className="order-date-text">
                   Placed on: {new Date(order.created_at).toLocaleString()}
                 </div>
               </div>
 
               {/* STATUS CONTROLLER */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "0.85rem", color: "#aaa" }}>Status:</span>
+              <div className="order-status-wrap">
+                <span className="order-status-label">Status:</span>
                 <select
                   value={order.status}
                   disabled={updatingId === order.id}
                   onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: "6px",
-                    background: "#2a2a2a",
-                    color:
-                      order.status === "Pending"
-                        ? "#f5a623"
-                        : order.status === "Accepted"
-                        ? "#4caf50"
-                        : order.status === "Completed"
-                        ? "#2196f3"
-                        : "#aaa",
-                    border: "1px solid #444",
-                    fontWeight: "600",
-                  }}
+                  className={`status-dropdown status-${order.status.replace(/\s+/g, "-")}`}
                 >
                   <option value="Pending">Pending</option>
                   <option value="Accepted">Accepted</option>
@@ -156,20 +137,10 @@ export default function StoreRequests() {
             </div>
 
             {/* ORDER ITEMS */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div className="order-items-list">
               {order.items.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "10px 12px",
-                    background: "#141414",
-                    borderRadius: "8px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div key={item.id} className="order-item-row">
+                  <div className="order-item-left">
                     {/* THUMBNAIL (CLICK TO ENLARGE) */}
                     {item.product_image ? (
                       <img
@@ -182,83 +153,42 @@ export default function StoreRequests() {
                           })
                         }
                         title="Click to view full image"
-                        style={{
-                          width: "48px",
-                          height: "48px",
-                          objectFit: "cover",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          border: "1px solid #333",
-                        }}
+                        className="order-item-thumb"
                       />
                     ) : (
-                      <div
-                        style={{
-                          width: "48px",
-                          height: "48px",
-                          background: "#222",
-                          borderRadius: "6px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#666",
-                        }}
-                      >
-                        ◈
-                      </div>
+                      <div className="order-item-thumb-placeholder">◈</div>
                     )}
 
                     <div>
-                      <div style={{ fontWeight: "600", color: "#eee" }}>
-                        {item.product_name}
-                      </div>
-                      <div style={{ fontSize: "0.85rem", color: "#999" }}>
+                      <div className="order-item-name">{item.product_name}</div>
+                      <div className="order-item-cat">
                         Category: {item.product_category}
                       </div>
                     </div>
                   </div>
 
                   {/* SIZE & QUANTITY SPECIFICATION */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <span
-                      style={{
-                        background: "#2b2b2b",
-                        border: "1px solid #444",
-                        padding: "3px 10px",
-                        borderRadius: "20px",
-                        fontSize: "0.85rem",
-                        fontWeight: "600",
-                        color: "#fff",
-                      }}
-                    >
+                  <div className="order-item-right">
+                    <span className="order-item-size-badge">
                       Size: {item.size}
                     </span>
 
-                    <span style={{ fontSize: "0.9rem", color: "#bbb" }}>
-                      Qty: <strong style={{ color: "#fff" }}>{item.quantity}</strong>
+                    <span className="order-item-qty">
+                      Qty: <strong>{item.quantity}</strong>
                     </span>
 
-                    <strong style={{ fontSize: "1rem", color: "var(--accent, #e5a93b)", minWidth: "80px", textAlign: "right" }}>
+                    <span className="order-item-price">
                       ₹{(Number(item.price) * item.quantity).toLocaleString("en-IN")}
-                    </strong>
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* TOTAL FOOTER */}
-            <div
-              style={{
-                marginTop: "14px",
-                paddingTop: "10px",
-                display: "flex",
-                justifyContent: "flex-end",
-                alignItems: "center",
-                gap: "12px",
-              }}
-            >
-              <span style={{ color: "#888", fontSize: "0.9rem" }}>Total Request Value:</span>
-              <strong style={{ fontSize: "1.2rem", color: "#fff" }}>
+            <div className="order-footer">
+              <span>Total Request Value:</span>
+              <strong>
                 ₹{Number(order.total_price).toLocaleString("en-IN")}
               </strong>
             </div>

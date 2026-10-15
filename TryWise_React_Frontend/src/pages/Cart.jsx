@@ -11,8 +11,8 @@ import ImageModal from "../components/ImageModal.jsx";
  * - Remove unwanted items.
  * - Submit the Bag It request to the Django backend (atomically reserves stock).
  */
-export default function Cart({ cart, setCart, setPage }) {
-  const { tokens } = useAuth();
+export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }) {
+  const { user, tokens } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -78,76 +78,78 @@ export default function Cart({ cart, setCart, setPage }) {
     0
   );
 
-  return (
-    <main className="page" style={{ maxWidth: "800px", margin: "0 auto", padding: "24px 16px" }}>
-      <label style={{ fontSize: "0.85rem", letterSpacing: "1px", color: "var(--accent, #e5a93b)" }}>
-        YOUR IN-STORE SELECTION
-      </label>
+  if (!user) {
+    return (
+      <main className="page" style={{ maxWidth: "600px", margin: "60px auto", textAlign: "center" }}>
+        <div className="empty" style={{ padding: "50px 30px" }}>
+          <div style={{ fontSize: "2.8rem", marginBottom: "12px" }}>🛍</div>
+          <label>YOUR BAG</label>
+          <h2 style={{ fontSize: "28px", margin: "12px 0 8px" }}>Sign In to View Bag It</h2>
+          <p style={{ color: "var(--muted)", marginBottom: "24px" }}>
+            Log in to manage your in-store selection, adjust sizes, and send requests.
+          </p>
+          <button
+            className="primary"
+            onClick={() => onOpenLogin && onOpenLogin("customer")}
+            style={{ padding: "12px 28px", borderRadius: "25px" }}
+          >
+            Log In as Customer ↗
+          </button>
+        </div>
+      </main>
+    );
+  }
 
-      <h1 style={{ margin: "4px 0 16px 0" }}>
+  return (
+    <main className="page" style={{ maxWidth: "880px", margin: "0 auto", padding: "40px 6vw" }}>
+      <label>YOUR IN-STORE SELECTION</label>
+
+      <h1 style={{ margin: "4px 0 14px 0" }}>
         My <em>Bag It.</em>
       </h1>
 
-      <p style={{ color: "#888", marginBottom: "24px" }}>
+      <p style={{ color: "var(--muted)", marginBottom: "28px" }}>
         Review your clothing sizes and quantities. Once submitted, the store owner prepares your items for trial.
       </p>
 
       {/* SUCCESS CONFIRMATION SCREEN */}
       {successOrder && (
-        <div
-          style={{
-            background: "rgba(76, 175, 80, 0.12)",
-            border: "1px solid rgba(76, 175, 80, 0.4)",
-            borderRadius: "14px",
-            padding: "24px",
-            textAlign: "center",
-            marginBottom: "24px",
-          }}
-        >
-          <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>🎉</div>
-          <h2 style={{ color: "#4caf50", margin: "0 0 8px 0" }}>
-            Bag It Request Submitted!
-          </h2>
-          <p style={{ color: "#ccc", margin: "0 0 16px 0" }}>
+        <div className="success-banner">
+          <div className="success-banner-icon">🎉</div>
+          <h2>Bag It Request Submitted!</h2>
+          <p>
             Request <strong>#{successOrder.id}</strong> has been sent to the store. Your selected sizes have been safely reserved for your visit.
           </p>
           <button
             className="primary"
             onClick={() => {
               setSuccessOrder(null);
-              setPage("products");
+              if (goProducts) goProducts("All");
+              else setPage("products");
             }}
-            style={{ padding: "10px 24px", borderRadius: "20px" }}
           >
             Explore More Products
           </button>
         </div>
       )}
 
-      {error && <div className="error-badge" style={{ marginBottom: "16px" }}>{error}</div>}
+      {error && <div className="error-badge">{error}</div>}
 
       {/* EMPTY CART */}
       {!cart.length && !successOrder ? (
-        <div
-          className="empty"
-          style={{
-            padding: "48px 20px",
-            textAlign: "center",
-            background: "#181818",
-            borderRadius: "14px",
-            border: "1px solid rgba(255, 255, 255, 0.05)",
-          }}
-        >
-          <div style={{ fontSize: "2rem", marginBottom: "12px", opacity: 0.6 }}>🛍</div>
-          Your Bag It is empty.
-          <br />
-          <small style={{ color: "#777", display: "block", marginTop: "6px" }}>
-            Explore the collection to add your favorite picks.
-          </small>
+        <div className="empty">
+          <div className="empty-icon">🛍</div>
+          <div className="empty-title">Your Bag It is empty.</div>
+          <div className="empty-text">
+            Explore the collection to add your favorite picks before visiting the store.
+          </div>
           <button
-            className="secondary"
-            onClick={() => setPage("products")}
-            style={{ marginTop: "16px", padding: "8px 20px", borderRadius: "20px" }}
+            className="primary"
+            onClick={() => {
+              if (goProducts) goProducts("All");
+              else setPage("products");
+            }}
+            style={{ marginTop: "20px" }}
           >
             Browse Products
           </button>
@@ -156,28 +158,19 @@ export default function Cart({ cart, setCart, setPage }) {
 
       {/* CART ITEMS LIST */}
       {cart.length > 0 && (
-        <div className="cart" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div className="cart-items-container">
           {cart.map((item, index) => (
             <div
               key={`${item.productId}_${item.size}_${index}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                background: "var(--card, #1c1c1c)",
-                padding: "16px",
-                borderRadius: "12px",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                flexWrap: "wrap",
-                gap: "14px",
-              }}
+              className="cart-item-card"
             >
               {/* IMAGE & DETAILS */}
-              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div className="cart-item-info">
                 {item.image ? (
                   <img
                     src={item.image}
                     alt={item.name}
+                    className="cart-item-img"
                     onClick={() =>
                       setPreviewImage({
                         url: item.image,
@@ -185,52 +178,16 @@ export default function Cart({ cart, setCart, setPage }) {
                       })
                     }
                     title="Click to zoom image"
-                    style={{
-                      width: "60px",
-                      height: "60px",
-                      objectFit: "cover",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      border: "1px solid #333",
-                    }}
                   />
                 ) : (
-                  <div
-                    style={{
-                      width: "60px",
-                      height: "60px",
-                      background: "#252525",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#777",
-                      fontSize: "1.2rem",
-                    }}
-                  >
-                    ◈
-                  </div>
+                  <div className="cart-item-placeholder">◈</div>
                 )}
 
                 <div>
-                  <b style={{ fontSize: "1.05rem", color: "#fff", display: "block" }}>
-                    {item.name}
-                  </b>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-                    <span
-                      style={{
-                        background: "#2b2b2b",
-                        border: "1px solid #444",
-                        padding: "2px 8px",
-                        borderRadius: "14px",
-                        fontSize: "0.8rem",
-                        color: "#fff",
-                        fontWeight: "600",
-                      }}
-                    >
-                      Size: {item.size}
-                    </span>
-                    <span style={{ fontSize: "0.85rem", color: "#888" }}>
+                  <b className="cart-item-name">{item.name}</b>
+                  <div className="cart-item-meta">
+                    <span className="cart-size-pill">Size: {item.size}</span>
+                    <span className="cart-unit-price">
                       ₹{item.price.toLocaleString("en-IN")} each
                     </span>
                   </div>
@@ -238,65 +195,34 @@ export default function Cart({ cart, setCart, setPage }) {
               </div>
 
               {/* QUANTITY CONTROLS & ITEM TOTAL */}
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div className="cart-item-controls">
                 {/* QUANTITY STEPPER */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    background: "#141414",
-                    borderRadius: "6px",
-                    border: "1px solid #333",
-                  }}
-                >
+                <div className="cart-stepper">
                   <button
                     onClick={() => handleQuantityChange(index, -1)}
-                    style={{
-                      padding: "6px 12px",
-                      background: "none",
-                      border: "none",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontSize: "1rem",
-                    }}
+                    title="Decrease quantity"
                   >
                     -
                   </button>
-                  <span style={{ padding: "0 8px", fontWeight: "600", color: "#fff" }}>
-                    {item.quantity}
-                  </span>
+                  <span>{item.quantity}</span>
                   <button
                     onClick={() => handleQuantityChange(index, 1)}
-                    style={{
-                      padding: "6px 12px",
-                      background: "none",
-                      border: "none",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontSize: "1rem",
-                    }}
+                    title="Increase quantity"
                   >
                     +
                   </button>
                 </div>
 
                 {/* LINE TOTAL */}
-                <strong style={{ minWidth: "90px", textAlign: "right", color: "var(--accent, #e5a93b)", fontSize: "1.1rem" }}>
+                <span className="cart-line-total">
                   ₹{(item.price * item.quantity).toLocaleString("en-IN")}
-                </strong>
+                </span>
 
                 {/* REMOVE BUTTON */}
                 <button
                   onClick={() => handleRemoveItem(index)}
-                  title="Remove item"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#777",
-                    cursor: "pointer",
-                    fontSize: "1.2rem",
-                    padding: "4px 8px",
-                  }}
+                  className="cart-remove-btn"
+                  title="Remove item from bag"
                 >
                   ✕
                 </button>
@@ -305,18 +231,10 @@ export default function Cart({ cart, setCart, setPage }) {
           ))}
 
           {/* ORDER SUMMARY & SUBMISSION */}
-          <div
-            style={{
-              marginTop: "16px",
-              padding: "20px",
-              background: "#141414",
-              borderRadius: "14px",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <span style={{ fontSize: "1.1rem", color: "#aaa" }}>Total Estimated Value:</span>
-              <strong style={{ fontSize: "1.5rem", color: "#fff" }}>
+          <div className="cart-summary-box">
+            <div className="summary-row">
+              <span className="summary-label">Total Estimated Value:</span>
+              <strong className="summary-total">
                 ₹{totalPrice.toLocaleString("en-IN")}
               </strong>
             </div>
@@ -325,14 +243,6 @@ export default function Cart({ cart, setCart, setPage }) {
               className="primary full"
               onClick={handleSubmitOrder}
               disabled={loading}
-              style={{
-                padding: "14px",
-                borderRadius: "10px",
-                fontSize: "1.05rem",
-                fontWeight: "600",
-                letterSpacing: "0.5px",
-                boxShadow: "0 4px 18px rgba(229, 169, 59, 0.35)",
-              }}
             >
               {loading ? "Submitting Bag It Request..." : "Send Bag It Request ↗"}
             </button>
