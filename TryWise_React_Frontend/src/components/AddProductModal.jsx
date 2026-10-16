@@ -199,7 +199,7 @@ export default function AddProductModal({ close, onProductAdded }) {
 
           {/* IMAGE UPLOAD WITH PREVIEW */}
           <div className="form-group" style={{ marginTop: "14px" }}>
-            <label htmlFor="image">Product Image (Saved via Pillow)</label>
+            <label htmlFor="image">Product Image</label>
             <input
               id="image"
               type="file"

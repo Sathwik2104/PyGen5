@@ -385,7 +385,7 @@ export default function Home({
                 title="Click to view in collection"
               >
                 ✦ <b>{currentItem?.name || "Visited Piece"}</b>
-                <small>Recently visited by you</small>
+                <small>Curated for you</small>
               </div>
             </>
           )}
