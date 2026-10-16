@@ -75,25 +75,40 @@ git push
    - **Name**: `trywise-api` (your URL will be `https://trywise-api.onrender.com`)
    - **Region**: Match the region of your TiDB Cloud database (e.g. `US East (Ohio)` or `Singapore`).
    - **Branch**: `master` (or `main`)
-   - **Root Directory**: Leave blank (root).
-   - **Runtime**: Select **Docker**.
-   - **Dockerfile Path**: `./backend/Dockerfile`
-   - **Docker Context**: `./backend`
-   - **Instance Type**: Select **Free** (512 MB RAM, 0.1 CPU).
-5. Scroll down to **Environment Variables** and add the following keys:
+   - **Root Directory**: `backend`  *(⚠️ Important: set this to backend)*
+   - **Runtime**: Select **Docker**
+   - **Dockerfile Path**: `Dockerfile`  *(or leave blank to auto-detect)*
+   - **Instance Type**: Select **Free** (512 MB RAM, 0.1 CPU)
+5. Scroll down to **Environment Variables**:
+   
+   > 💡 **Quickest Way**: Click the **"Add from .env"** button in Render and paste this whole block at once:
+   ```env
+   DEBUG=False
+   SECRET_KEY=django-prod-trywise-secure-key-2026-xyz
+   ALLOWED_HOSTS=*
+   CORS_ALLOW_ALL_ORIGINS=True
+   DB_NAME=trywise_db
+   DB_HOST=your-tidb-host-here
+   DB_PORT=4000
+   DB_USER=your-tidb-user-here
+   DB_PASSWORD=your-tidb-password-here
+   DB_SSL=True
+   ```
 
-| Environment Variable Key | Recommended Value | Notes |
+   *(Or if typing manually one by one, do NOT include backticks or `=` inside the Key field)*:
+
+| Key (Plain text) | Value | Notes |
 | :--- | :--- | :--- |
-| `DEBUG` | `False` | Disables debug mode for security |
-| `SECRET_KEY` | *(generate any long random string)* | e.g. `django-prod-k8#z9@x4v1q!trywise2026` |
-| `ALLOWED_HOSTS` | `*` | Or `.onrender.com,localhost` |
-| `CORS_ALLOW_ALL_ORIGINS` | `True` | Allows Vercel frontend to make API calls |
-| `DB_NAME` | `trywise_db` | Your database name in TiDB |
-| `DB_HOST` | *(your TiDB host)* | e.g. `gateway01.us-east-1.prod.aws.tidbcloud.com` |
-| `DB_PORT` | `4000` | TiDB Cloud MySQL port |
-| `DB_USER` | *(your TiDB user)* | e.g. `xxxx.root` |
-| `DB_PASSWORD` | *(your TiDB password)* | The password you created in TiDB |
-| `DB_SSL` | `True` | Enables SSL encryption required by TiDB |
+| DEBUG | False | Disables debug mode for security |
+| SECRET_KEY | django-prod-trywise-secure-key-2026-xyz | Long secret string |
+| ALLOWED_HOSTS | * | Allows requests to your Render URL |
+| CORS_ALLOW_ALL_ORIGINS | True | Allows Vercel frontend to make API calls |
+| DB_NAME | trywise_db | Your database name in TiDB |
+| DB_HOST | *(your TiDB host)* | e.g. gateway01.us-east-1.prod.aws.tidbcloud.com |
+| DB_PORT | 4000 | TiDB Cloud MySQL port |
+| DB_USER | *(your TiDB user)* | e.g. xxxx.root |
+| DB_PASSWORD | *(your TiDB password)* | The password you set in TiDB |
+| DB_SSL | True | Enables SSL encryption required by TiDB |
 
 6. Click **Create Web Service**.
 7. Render will now:
