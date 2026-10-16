@@ -92,6 +92,7 @@ class IsStoreOwner(permissions.BasePermission):
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from .models import Product, Order, OrderItem, OrderStatus
 from .serializers import (
     ProductSerializer,
@@ -179,8 +180,36 @@ class ProductDetailView(APIView):
         product = self.get_object(pk)
         if not product:
             return Response({'detail': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
-        product.delete()
-        return Response({'message': 'Product deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+        # Check if there are active (in-progress) requests containing this product
+        active_items = OrderItem.objects.filter(
+            product=product
+        ).exclude(
+            order__status__in=[OrderStatus.COMPLETED, OrderStatus.CANCELLED]
+        )
+
+        if active_items.exists():
+            active_statuses = sorted(list(set(active_items.values_list('order__status', flat=True))))
+            status_text = ", ".join(active_statuses)
+            return Response(
+                {
+                    'detail': (
+                        f"Cannot delete '{product.name}' because it has active Bag It request(s) "
+                        f"with status: {status_text}. "
+                        f"Please change the request status to 'Completed' or 'Cancelled' first."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            product.delete()
+            return Response({'message': 'Product deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+        except ProtectedError:
+            return Response(
+                {'detail': 'Cannot delete product because it is protected by existing records.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 # ==============================================================================
@@ -286,9 +315,14 @@ class OrderListCreateView(APIView):
 
                 # Create OrderItems
                 for prep in prepared_items:
+                    prod = prep['product']
+                    img_url = prod.image.url if prod.image and hasattr(prod.image, 'url') else ''
                     OrderItem.objects.create(
                         order=order,
-                        product=prep['product'],
+                        product=prod,
+                        product_name=prod.name,
+                        product_category=prod.category,
+                        product_image_url=img_url,
                         size=prep['size'],
                         quantity=prep['quantity'],
                         price=prep['price']

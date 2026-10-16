@@ -109,13 +109,19 @@ class OrderItem(models.Model):
     )
     product = models.ForeignKey(
         Product,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='order_items'
     )
+    product_name = models.CharField(max_length=255, blank=True, default='')
+    product_category = models.CharField(max_length=20, blank=True, default='')
+    product_image_url = models.CharField(max_length=500, blank=True, default='', null=True)
     size = models.CharField(max_length=5)  # 'S', 'M', 'L', 'XL'
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
-        return f"{self.product.name} (Size: {self.size}, Qty: {self.quantity})"
+        name = self.product.name if self.product else (self.product_name or "Deleted Product")
+        return f"{name} (Size: {self.size}, Qty: {self.quantity})"
 

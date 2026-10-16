@@ -112,8 +112,8 @@ class ProductSerializer(serializers.ModelSerializer):
 # ==============================================================================
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.ReadOnlyField(source='product.name')
-    product_category = serializers.ReadOnlyField(source='product.category')
+    product_name = serializers.SerializerMethodField()
+    product_category = serializers.SerializerMethodField()
     product_image = serializers.SerializerMethodField()
 
     class Meta:
@@ -129,12 +129,26 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'price',
         )
 
+    def get_product_name(self, obj):
+        if obj.product:
+            return obj.product.name
+        return obj.product_name or "Deleted Product"
+
+    def get_product_category(self, obj):
+        if obj.product:
+            return obj.product.category
+        return obj.product_category or "General"
+
     def get_product_image(self, obj):
         request = self.context.get('request')
-        if obj.product.image and hasattr(obj.product.image, 'url'):
+        if obj.product and obj.product.image and hasattr(obj.product.image, 'url'):
             if request:
                 return request.build_absolute_uri(obj.product.image.url)
             return obj.product.image.url
+        if obj.product_image_url:
+            if request and obj.product_image_url.startswith('/'):
+                return request.build_absolute_uri(obj.product_image_url)
+            return obj.product_image_url
         return None
 
 
