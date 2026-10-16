@@ -53,7 +53,8 @@ db.sqlite3-journal
 *.sqlite3
 
 # Django media & static collected assets
-media/
+backend/serv/media/*
+!backend/serv/media/products/
 staticfiles/
 
 # ==============================================================================
