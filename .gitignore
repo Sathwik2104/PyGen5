@@ -1,0 +1,123 @@
+# ==============================================================================
+# Environment Variables & Sensitive Credentials
+# ==============================================================================
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+*.pem
+*.key
+*.cert
+*.crt
+
+# ==============================================================================
+# Python & Virtual Environments
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==============================================================================
+# Django Specific
+# ==============================================================================
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+
+# Django media & static collected assets
+backend/serv/media/*
+!backend/serv/media/products/
+staticfiles/
+
+# ==============================================================================
+# Node.js & React Frontend (Vite)
+# ==============================================================================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Node logs
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Vite cache
+.vite/
+
+# ==============================================================================
+# Testing & Code Coverage
+# ==============================================================================
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# ==============================================================================
+# IDEs & Code Editors
+# ==============================================================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# ==============================================================================
+# Operating System Files
+# ==============================================================================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ==============================================================================
+# Temporary Files, Scratchpads & Local Notes
+# ==============================================================================
+*.tmp
+*.temp
+*.bak
+scratch/

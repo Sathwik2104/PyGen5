@@ -1,0 +1,234 @@
+[
+{
+  "model": "trywise.user",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$RqTZ4fL8neh7w7HNOWELcK$SXls62v7V99e0cGcNNn4oefOpVk8B+UQ4DKv71pNeho=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "sathwik2104",
+    "first_name": "Sathwik",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-09T09:29:13.236Z",
+    "email": "sathwik2104@gmail.com",
+    "role": "customer",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.user",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$eH1lZ346Sy0D3o74cLNvAJ$NhF7Twu3p0dyvvBcHevV+tehe6+gqaenzw9HStoSImM=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "charishma123",
+    "first_name": "Charishma",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-09T09:38:18.477Z",
+    "email": "charishma123@gmail.com",
+    "role": "store_owner",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.user",
+  "pk": 3,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$e9PkQW7um9wxOUB9aXORc8$oSi8J/DugiJ+VfifR3Au1rXgXbFkmwPu8elRc4FqByg=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "susruthi123",
+    "first_name": "Susruthi",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-09T11:39:42.016Z",
+    "email": "susruthi123@gmail.com",
+    "role": "customer",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.user",
+  "pk": 4,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$YIUxrpwYDxjq2Dl0rOuxNX$uNbylwJ//RM/DmhV9DQQG1eL0toaM1i63koozcp0qbw=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "charishma1234",
+    "first_name": "Charishma",
+    "last_name": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-15T06:41:36.827Z",
+    "email": "charishma1234@gmail.com",
+    "role": "store_owner",
+    "phone_number": "",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 7,
+  "fields": {
+    "name": "Sage White Tee",
+    "category": "Men",
+    "price": "1499.00",
+    "image": "products/WhatsApp_Image_2026-10-15_at_8.46.28_PM.jpeg",
+    "size_s": 8,
+    "size_m": 3,
+    "size_l": 8,
+    "size_xl": 0,
+    "created_by": 2,
+    "created_at": "2026-10-16T05:28:00.230Z",
+    "updated_at": "2026-10-16T05:28:00.230Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 8,
+  "fields": {
+    "name": "Mocha-Polo-Beige Trousers",
+    "category": "Men",
+    "price": "2999.00",
+    "image": "products/WhatsApp_Image_2026-10-15_at_8_1GDkQJd.46.28_PM.jpeg",
+    "size_s": 15,
+    "size_m": 6,
+    "size_l": 8,
+    "size_xl": 7,
+    "created_by": 2,
+    "created_at": "2026-10-16T05:29:52.722Z",
+    "updated_at": "2026-10-16T05:29:52.722Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 9,
+  "fields": {
+    "name": "Cozy Floral Knit Dress",
+    "category": "Women",
+    "price": "1598.97",
+    "image": "products/WhatsApp_Image_2026-10-15_at_6.19.46_PM.jpeg",
+    "size_s": 6,
+    "size_m": 4,
+    "size_l": 7,
+    "size_xl": 0,
+    "created_by": 2,
+    "created_at": "2026-10-16T05:31:17.679Z",
+    "updated_at": "2026-10-16T05:31:17.679Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 10,
+  "fields": {
+    "name": "Blush Satin Dress",
+    "category": "Women",
+    "price": "2499.00",
+    "image": "products/WhatsApp_Image_2026-10-15_at_6_Mog2ann.19.46_PM.jpeg",
+    "size_s": 8,
+    "size_m": 3,
+    "size_l": 7,
+    "size_xl": 0,
+    "created_by": 2,
+    "created_at": "2026-10-16T05:33:07.106Z",
+    "updated_at": "2026-10-16T05:33:07.106Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 12,
+  "fields": {
+    "name": "Cream Lenin Shirt",
+    "category": "Men",
+    "price": "1899.00",
+    "image": "products/WhatsApp_Image_2026-10-15_at_8_ttdcQBz.46.28_PM.jpeg",
+    "size_s": 7,
+    "size_m": 5,
+    "size_l": 0,
+    "size_xl": 3,
+    "created_by": 2,
+    "created_at": "2026-10-16T05:35:47.707Z",
+    "updated_at": "2026-10-16T05:35:47.707Z"
+  }
+},
+{
+  "model": "trywise.product",
+  "pk": 13,
+  "fields": {
+    "name": "Cream Knit and Denim",
+    "category": "Women",
+    "price": "2999.00",
+    "image": "products/WhatsApp_Image_2026-10-15_at_6_8PVImar.19.46_PM.jpeg",
+    "size_s": 8,
+    "size_m": 5,
+    "size_l": 0,
+    "size_xl": 2,
+    "created_by": 2,
+    "created_at": "2026-10-16T09:53:09.244Z",
+    "updated_at": "2026-10-16T09:53:09.244Z"
+  }
+},
+{
+  "model": "trywise.order",
+  "pk": 1,
+  "fields": {
+    "customer": 1,
+    "total_price": "3798.00",
+    "status": "Completed",
+    "created_at": "2026-10-13T06:53:44.579Z",
+    "updated_at": "2026-10-16T05:19:44.287Z"
+  }
+},
+{
+  "model": "trywise.order",
+  "pk": 2,
+  "fields": {
+    "customer": 1,
+    "total_price": "4598.00",
+    "status": "Completed",
+    "created_at": "2026-10-14T06:22:45.827Z",
+    "updated_at": "2026-10-16T05:19:41.345Z"
+  }
+},
+{
+  "model": "trywise.orderitem",
+  "pk": 1,
+  "fields": {
+    "order": 1,
+    "product": null,
+    "product_name": "Wide-Leg Jeans",
+    "product_category": "Women",
+    "product_image_url": "",
+    "size": "S",
+    "quantity": 2,
+    "price": "1899.00"
+  }
+},
+{
+  "model": "trywise.orderitem",
+  "pk": 2,
+  "fields": {
+    "order": 2,
+    "product": null,
+    "product_name": "Blush Satin Slip Dress",
+    "product_category": "Women",
+    "product_image_url": "/media/products/WhatsApp_Image_2026-10-12_at_3.49.13_PM.jpeg",
+    "size": "M",
+    "quantity": 2,
+    "price": "2299.00"
+  }
+}
+]
