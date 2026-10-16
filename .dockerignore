@@ -1,0 +1,8 @@
+backend/venv/
+TryWise_React_Frontend/node_modules/
+TryWise_React_Frontend/dist/
+.git/
+__pycache__/
+*.pyc
+*.sqlite3
+.env
