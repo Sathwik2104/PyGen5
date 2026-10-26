@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useToast } from "../context/ToastContext.jsx";
 import { fetchProducts, updateProductStock, deleteProduct } from "../services/api.js";
 import ImageModal from "../components/ImageModal.jsx";
+import EditProductModal from "../components/EditProductModal.jsx";
 import { recordProductVisit } from "../services/recentHistory.js";
 
 /**
@@ -9,8 +11,8 @@ import { recordProductVisit } from "../services/recentHistory.js";
  * - Customers: Browse collection, pick clothing sizes (with <5 low-stock alert,
  *   hidden exact count when >=5), preview images, and add to "Bag It".
  * - Store Owners: View exact inventory quantities per size (S, M, L, XL),
- *   use inline [+] / [-] buttons to instantly adjust stock, add new products,
- *   or delete items.
+ *   use inline [+] / [-] buttons to instantly adjust stock, edit product info/prices,
+ *   add new products, or delete items.
  */
 export default function Products({ category, setCategory, addToCart, onOpenAddProduct, onOpenLogin }) {
   const { user, tokens } = useAuth();
@@ -20,14 +22,19 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Selected size per product id for customers (e.g., { 1: 'M', 2: 'S' })
   const [selectedSizes, setSelectedSizes] = useState({});
+  const [addedProductId, setAddedProductId] = useState(null);
+  const { showToast } = useToast();
 
   // Image modal state
   const [previewImage, setPreviewImage] = useState(null);
 
+  // Product being edited by store owner
+  const [editingProduct, setEditingProduct] = useState(null);
+
   // Stock updating loader indicator per product
   const [stockUpdating, setStockUpdating] = useState({});
+
 
   const activeCategory =
     typeof category === "string" && (category === "Women" || category === "Men")
@@ -240,9 +247,21 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
               <div className="product-info">
                 <div className="product-title-row">
                   <h3 className="product-title">{product.name}</h3>
-                  <span className="product-price-tag">
-                    ₹{Number(product.price).toLocaleString("en-IN")}
-                  </span>
+                  <div className="price-display-wrap">
+                    {product.original_price && Number(product.original_price) > Number(product.price) && (
+                      <span className="product-original-price">
+                        ₹{Number(product.original_price).toLocaleString("en-IN")}
+                      </span>
+                    )}
+                    <span className="product-price-tag">
+                      ₹{Number(product.price).toLocaleString("en-IN")}
+                    </span>
+                    {product.original_price && Number(product.original_price) > Number(product.price) && (
+                      <span className="sale-discount-tag">
+                        {product.discount_percent || Math.round(((product.original_price - product.price) / product.original_price) * 100)}% OFF
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* STORE OWNER CONTROLS (FULL INVENTORY TRANSPARENCY & ADJUSTERS) */}
@@ -250,14 +269,24 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
                   <div className="store-inventory-panel">
                     <div className="store-inv-header">
                       <span>Manage Size Stock</span>
-                      <button
-                        onClick={() => handleDeleteProduct(product.id, product.name)}
-                        className="product-delete-btn"
-                        title="Delete product"
-                      >
-                        🗑 Delete
-                      </button>
+                      <div className="store-owner-btn-group" style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={() => setEditingProduct(product)}
+                          className="product-edit-btn"
+                          title="Edit product details, image, or price"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(product.id, product.name)}
+                          className="product-delete-btn"
+                          title="Delete product"
+                        >
+                          🗑 Delete
+                        </button>
+                      </div>
                     </div>
+
 
                     <div className="inventory-grid">
                       {[
@@ -351,11 +380,20 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
                           size: currentSize,
                           availableStock: product[`size_${currentSize.toLowerCase()}`] || 0,
                         });
+                        setAddedProductId(product.id);
+                        showToast(`Added ${product.name} (Size ${currentSize}) to your Bag It!`, "success");
+                        setTimeout(() => {
+                          setAddedProductId((prev) => (prev === product.id ? null : prev));
+                        }, 1500);
                       }}
                       disabled={!stockInfo.isAvailable}
-                      className="btn-bag-it"
+                      className={`btn-bag-it ${addedProductId === product.id ? "is-added" : ""}`}
                     >
-                      {stockInfo.isAvailable ? `+ Bag It (Size ${currentSize})` : "Sold Out"}
+                      {addedProductId === product.id
+                        ? "✓ Added to Bag!"
+                        : stockInfo.isAvailable
+                        ? `+ Bag It (Size ${currentSize})`
+                        : "Sold Out"}
                     </button>
                   </div>
                 )}
@@ -373,6 +411,20 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
           onClose={() => setPreviewImage(null)}
         />
       )}
+
+      {/* STORE OWNER: EDIT PRODUCT MODAL */}
+      {editingProduct && (
+        <EditProductModal
+          product={editingProduct}
+          close={() => setEditingProduct(null)}
+          onProductUpdated={(updated) => {
+            setProducts((prev) =>
+              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+            );
+          }}
+        />
+      )}
     </main>
   );
 }
+

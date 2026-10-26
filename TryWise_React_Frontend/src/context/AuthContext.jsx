@@ -28,21 +28,26 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
+  const setAuthData = (userData, tokensData) => {
+    setUser(userData);
+    setTokens(tokensData);
+    localStorage.setItem("trywise_tokens", JSON.stringify(tokensData));
+    localStorage.setItem("trywise_user", JSON.stringify(userData));
+  };
+
   const login = async (credentials) => {
     const data = await loginUser(credentials);
-    setUser(data.user);
-    setTokens(data.tokens);
-    localStorage.setItem("trywise_tokens", JSON.stringify(data.tokens));
-    localStorage.setItem("trywise_user", JSON.stringify(data.user));
+    if (data.tokens && data.user) {
+      setAuthData(data.user, data.tokens);
+    }
     return data;
   };
 
   const register = async (userData) => {
     const data = await registerUser(userData);
-    setUser(data.user);
-    setTokens(data.tokens);
-    localStorage.setItem("trywise_tokens", JSON.stringify(data.tokens));
-    localStorage.setItem("trywise_user", JSON.stringify(data.user));
+    if (data.tokens && data.user) {
+      setAuthData(data.user, data.tokens);
+    }
     return data;
   };
 
@@ -61,12 +66,14 @@ export function AuthProvider({ children }) {
         loading,
         login,
         register,
+        setAuthData,
         logout,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
+
 }
 
 export function useAuth() {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+import { ToastProvider } from "./context/ToastContext.jsx";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import LoginModal from "./components/LoginModal.jsx";
@@ -21,6 +22,22 @@ function MainContent() {
   const [cart, setCart] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [postLoginIntent, setPostLoginIntent] = useState(null);
+
+  // Execute intent-based redirection after user logs in or registers
+  useEffect(() => {
+    if (user && postLoginIntent) {
+      if (postLoginIntent.page === "products") {
+        const cat = postLoginIntent.category || "All";
+        setCategory(cat);
+        setPage("products");
+      } else if (postLoginIntent.page === "cart") {
+        setPage("cart");
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setPostLoginIntent(null);
+    }
+  }, [user, postLoginIntent]);
 
   // For store owners, poll/fetch pending orders count for the notification badge
   useEffect(() => {
@@ -44,15 +61,18 @@ function MainContent() {
   }, [user, tokens]);
 
   const goProducts = (targetCategory = "All") => {
-    if (!user) {
-      setLoginModal("customer");
-      return;
-    }
     const cat =
       typeof targetCategory === "string" &&
       (targetCategory === "Women" || targetCategory === "Men")
         ? targetCategory
         : "All";
+
+    if (!user) {
+      setPostLoginIntent({ page: "products", category: cat });
+      setLoginModal("customer");
+      return;
+    }
+
     setCategory(cat);
     setPage("products");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -172,7 +192,9 @@ function MainContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <MainContent />
+      <ToastProvider>
+        <MainContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }

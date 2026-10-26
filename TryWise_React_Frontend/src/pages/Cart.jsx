@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { createOrder } from "../services/api.js";
+import { createOrder, fetchOrders } from "../services/api.js";
 import ImageModal from "../components/ImageModal.jsx";
 
 /**
@@ -11,6 +11,25 @@ import ImageModal from "../components/ImageModal.jsx";
  * - Remove unwanted items.
  * - Submit the Bag It request to the Django backend (atomically reserves stock).
  */
+/**
+ * Formats hold duration dynamically (e.g. "2-minute", "30-minute", "24-hour")
+ */
+const getTrialTimeframeLabel = (ord) => {
+  if (ord?.expires_at) {
+    const start = ord.ready_at ? new Date(ord.ready_at).getTime() : new Date(ord.created_at).getTime();
+    const end = new Date(ord.expires_at).getTime();
+    const diffSec = Math.max(0, Math.round((end - start) / 1000));
+    if (diffSec < 3600) {
+      const mins = Math.max(1, Math.round(diffSec / 60));
+      return `${mins}-minute`;
+    } else {
+      const hrs = Math.max(1, Math.round(diffSec / 3600));
+      return `${hrs}-hour`;
+    }
+  }
+  return "trial";
+};
+
 export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }) {
   const { user, tokens } = useAuth();
 
@@ -18,6 +37,15 @@ export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }
   const [error, setError] = useState(null);
   const [successOrder, setSuccessOrder] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [customerOrders, setCustomerOrders] = useState([]);
+
+  useEffect(() => {
+    if (user && tokens?.access) {
+      fetchOrders(tokens.access)
+        .then((data) => setCustomerOrders(data))
+        .catch((err) => console.error("Error loading orders:", err));
+    }
+  }, [user, tokens, successOrder]);
 
   // Update quantity of an item
   const handleQuantityChange = (index, delta) => {
@@ -248,6 +276,135 @@ export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }
             </button>
           </div>
         </div>
+      )}
+
+      {/* CUSTOMER ACTIVE & PAST TRIAL REQUESTS */}
+      {customerOrders.length > 0 && (
+        <section style={{ marginTop: "48px", borderTop: "1px solid var(--line)", paddingTop: "32px" }}>
+          <label style={{ fontSize: "11px", letterSpacing: "1.5px", color: "var(--muted)", textTransform: "uppercase" }}>
+            TRIAL QUEUE STATUS
+          </label>
+          <h2 style={{ fontSize: "22px", margin: "6px 0 20px 0" }}>
+            My Bag It <em>Requests.</em>
+          </h2>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            {customerOrders.map((ord) => {
+              const isReady = ord.status === "Ready for Pickup";
+              const isExpired = ord.status === "Cancelled" && ord.expires_at && new Date(ord.expires_at) <= new Date(ord.updated_at);
+
+              return (
+                <div
+                  key={ord.id}
+                  style={{
+                    background: isReady ? "#f0fdf4" : "var(--white)",
+                    border: isReady ? "1.5px solid #86efac" : "1px solid var(--line)",
+                    borderRadius: "14px",
+                    padding: "20px",
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
+                    <div>
+                      <strong style={{ fontSize: "16px" }}>Request #{ord.id}</strong>
+                      <span style={{ fontSize: "13px", color: "var(--muted)", marginLeft: "10px" }}>
+                        {new Date(ord.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <span
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: "20px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        background:
+                          ord.status === "Ready for Pickup"
+                            ? "#dcfce7"
+                            : ord.status === "Accepted"
+                            ? "#ede9fe"
+                            : ord.status === "Completed"
+                            ? "#f1f5f9"
+                            : ord.status === "Cancelled"
+                            ? "#fee2e2"
+                            : "#fef3c7",
+                        color:
+                          ord.status === "Ready for Pickup"
+                            ? "#15803d"
+                            : ord.status === "Accepted"
+                            ? "#6d28d9"
+                            : ord.status === "Completed"
+                            ? "#334155"
+                            : ord.status === "Cancelled"
+                            ? "#b91c1c"
+                            : "#b45309",
+                      }}
+                    >
+                      {ord.status === "Ready for Pickup" ? "✨ Ready to Try On!" : ord.status}
+                    </span>
+                  </div>
+
+                  {/* READY NOTIFICATION BANNER WITH STORE TIMING */}
+                  {isReady && ord.expires_at && (
+                    <div
+                      style={{
+                        background: "#ffffff",
+                        border: "1px dashed #22c55e",
+                        borderRadius: "10px",
+                        padding: "12px 14px",
+                        margin: "10px 0 14px",
+                        fontSize: "13px",
+                        color: "#166534",
+                        lineHeight: "1.5",
+                      }}
+                    >
+                      <strong>🎉 Your pieces are waiting in the fitting room!</strong>
+                      <br />
+                      ⏰ <strong>Hold Deadline:</strong> Reserved until {new Date(ord.expires_at).toLocaleString()} (Store Hours: 10:00 AM – 9:00 PM).
+                      <br />
+                      Visit the fitting room, mention Order #{ord.id}, try on, and pay only for what you take!
+                    </div>
+                  )}
+
+                  {/* AUTO-CANCELLED EXPIRED BADGE */}
+                  {isExpired && (
+                    <div
+                      style={{
+                        background: "#fff1f2",
+                        border: "1px solid #fecdd3",
+                        borderRadius: "8px",
+                        padding: "10px 14px",
+                        margin: "10px 0 14px",
+                        fontSize: "13px",
+                        color: "#9f1239",
+                      }}
+                    >
+                      ⚠️ <strong>Trial Window Expired:</strong> The {getTrialTimeframeLabel(ord)} reservation ended (held until {new Date(ord.expires_at).toLocaleString()}), and the items have been returned to store inventory.
+                    </div>
+                  )}
+
+                  {/* ITEMS LIST */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+                    {ord.items?.map((it) => (
+                      <span
+                        key={it.id}
+                        style={{
+                          background: "var(--paper)",
+                          border: "1px solid var(--line)",
+                          borderRadius: "8px",
+                          padding: "6px 10px",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {it.product_name || "Piece"} (Size {it.size}) × {it.quantity}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* FULL IMAGE ZOOM MODAL */}

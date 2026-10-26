@@ -37,6 +37,21 @@ body {
 button {
     font: inherit;
     cursor: pointer;
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.2s ease,
+                border-color 0.2s ease,
+                color 0.2s ease,
+                box-shadow 0.2s ease;
+}
+
+/* Tactile press on EVERY button click across the website */
+button:active,
+.pill:active,
+.primary:active,
+.secondary:active,
+nav button:active,
+.profile:active {
+    transform: scale(0.96) !important;
 }
 
 
@@ -89,27 +104,40 @@ header {
 
 nav {
     display: flex;
-    gap: 28px;
+    align-items: center;
+    gap: 8px;
 }
 
-nav button,
-.profile {
-    border: 0;
+nav button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    border: 1px solid transparent;
     background: none;
     color: #625d65;
     font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: all 0.2s ease;
 }
 
+nav button:hover {
+    color: var(--ink);
+    background: var(--paper-tint);
+    border-color: var(--line);
+}
 
 /* Right-side actions */
 
 .actions {
     position: relative;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
 }
-
 
 /* Bag It button */
 
@@ -118,6 +146,25 @@ nav button,
     border-radius: 30px;
     background: none;
     padding: 9px 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pill:hover {
+    background: var(--paper-tint);
+    border-color: var(--ink);
+}
+
+.pill-primary {
+    background: var(--ink) !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    border: none !important;
+}
+
+.pill-primary:hover {
+    background: var(--accent) !important;
+    color: #fff !important;
 }
 
 .pill i {
@@ -129,26 +176,49 @@ nav button,
     margin-left: 4px;
 }
 
-
-/* Profile */
+/* Profile Toggle */
 
 .profile {
-    padding: 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    vertical-align: middle;
 }
 
+.profile:hover {
+    background: var(--paper-tint);
+    border-color: var(--line);
+}
+
+.profile-caret {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.25s ease;
+    line-height: 1;
+}
+
+.profile-caret.open {
+    transform: rotate(180deg);
+}
 
 /* Profile dropdown */
 
 .menu {
     position: absolute;
     right: 0;
-    top: 48px;
+    top: calc(100% + 8px);
     background: var(--white);
     border: 1px solid var(--line);
-    border-radius: 15px;
+    border-radius: 16px;
     padding: 12px;
-    width: 220px;
-    box-shadow: 0 20px 45px #0002;
+    width: 230px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+    z-index: 100;
 }
 
 .menu>* {
@@ -997,6 +1067,10 @@ h2 em {
 .password-toggle-btn:hover {
     color: var(--ink);
     background-color: rgba(23, 21, 26, 0.06);
+}
+
+.password-toggle-btn:active {
+    transform: translateY(-50%) scale(0.92) !important;
 }
 
 .full {
@@ -2056,4 +2130,576 @@ footer p {
     max-height: 480px;
     object-fit: contain;
     display: block;
+}
+
+/* =========================================================
+   SALE BADGES & PRICING WRAPPERS
+========================================================= */
+
+.price-display-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.product-original-price {
+    text-decoration: line-through;
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.sale-discount-tag {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 12px;
+    padding: 2px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Store Owner Card Action Buttons */
+.product-edit-btn {
+    background: #eef2ff;
+    color: #4338ca;
+    border: 1px solid #c7d2fe;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.product-edit-btn:hover {
+    background: #4338ca;
+    color: #ffffff;
+}
+
+.product-delete-btn {
+    background: #fff5f5;
+    color: #e53e3e;
+    border: 1px solid #fed7d7;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.product-delete-btn:hover {
+    background: #e53e3e;
+    color: #ffffff;
+}
+
+/* =========================================================
+   REVENUE & ANALYTICS DASHBOARD
+========================================================= */
+
+.revenue-dashboard-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
+}
+
+.pill-filter-btn {
+    transition: all 0.2s ease;
+}
+
+.pill-filter-btn:hover:not(.active) {
+    background: #f1f5f9;
+}
+
+
+/* =========================================================
+   + BAG IT BUTTON HOVER & ACTIVE FEEDBACK
+========================================================= */
+
+.btn-bag-it {
+    width: 100%;
+    padding: 11px 16px;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-bag-it:hover:not(:disabled) {
+    background: var(--ink);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(23, 21, 26, 0.15);
+    transform: translateY(-2px);
+}
+
+.btn-bag-it.is-added {
+    background: #10b981 !important;
+    border-color: #10b981 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
+    transform: scale(1.02);
+}
+
+.btn-bag-it:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: var(--line);
+}
+
+
+/* =========================================================
+   TOAST NOTIFICATIONS
+========================================================= */
+
+.toast-container {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 99999;
+    pointer-events: none;
+}
+
+.toast-card {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+    min-width: 290px;
+    max-width: 440px;
+    animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-card.toast-success {
+    border-left: 4px solid #10b981;
+}
+
+.toast-card.toast-error {
+    border-left: 4px solid #ef4444;
+}
+
+.toast-icon {
+    font-weight: 800;
+    font-size: 16px;
+    color: #10b981;
+}
+
+.toast-card.toast-error .toast-icon {
+    color: #ef4444;
+}
+
+.toast-msg {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.toast-close:hover {
+    color: #0f172a;
+}
+
+@keyframes toastSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-12px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+
+/* =========================================================
+   TRIAL TIMING DEADLINE BADGES
+========================================================= */
+
+.trial-timer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 6px;
+}
+
+.trial-timer-badge.expired {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+/* =========================================================
+   EXTRACTED MODAL & AUTH CLASSES
+========================================================= */
+
+.modal-feedback-error {
+    color: #e53e3e;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    background-color: #fff5f5;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #fed7d7;
+}
+
+.modal-feedback-success {
+    color: #065f46;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    background-color: #f0fdf4;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #bbf7d0;
+}
+
+.modal-text-muted {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 16px;
+}
+
+.modal-otp-input {
+    font-size: 1.4rem;
+    letter-spacing: 6px;
+    text-align: center;
+    font-weight: 700;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.modal-nav-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+}
+
+.modal-action-link {
+    background: none;
+    border: none;
+    color: #6366f1;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+.modal-action-link.disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.modal-back-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+.modal-center-link-wrap {
+    text-align: center;
+    margin-top: 14px;
+}
+
+.modal-forgot-link-wrap {
+    text-align: right;
+    margin-top: -6px;
+    margin-bottom: 14px;
+}
+
+.modal-switch-text {
+    margin-top: 1rem;
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+}
+
+.modal-inline-link {
+    background: none;
+    border: none;
+    color: var(--ink);
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    font-weight: 600;
+}
+
+/* =========================================================
+   EXTRACTED STORE REQUESTS & REVENUE CLASSES
+========================================================= */
+
+.store-guard-panel {
+    max-width: 600px;
+    margin: 60px auto;
+    text-align: center;
+    padding: 40px 24px;
+}
+
+.store-guard-icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+}
+
+.store-guard-text {
+    color: var(--muted);
+    margin: 12px 0 24px;
+    line-height: 1.6;
+}
+
+.store-page-wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 6vw;
+}
+
+.store-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.store-header-title {
+    margin: 4px 0 10px 0;
+}
+
+.store-header-sub {
+    color: var(--muted);
+    margin: 0;
+}
+
+.revenue-dashboard-panel {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 28px;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 16px rgba(23, 21, 26, 0.04);
+}
+
+.revenue-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.revenue-panel-title {
+    margin: 0 0 4px 0;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.5px;
+}
+
+.revenue-panel-sub {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.revenue-filters-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.revenue-select {
+    padding: 7px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    font-size: 0.85rem;
+    color: var(--ink);
+}
+
+.revenue-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+}
+
+.revenue-metric-card {
+    background: var(--paper);
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid var(--line-subtle);
+}
+
+.revenue-metric-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.revenue-metric-val {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: var(--ink);
+    margin-top: 6px;
+    letter-spacing: -0.5px;
+}
+
+.revenue-metric-sub {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 4px;
+    display: block;
+}
+
+.trial-checkout-guide {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin: 14px 20px 0;
+    font-size: 0.85rem;
+    color: #166534;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.order-item-decision-pill {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 14px;
+}
+
+.order-item-decision-pill.restocked {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.order-item-decision-pill.purchased {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.order-item-decision-toggle {
+    display: flex;
+    gap: 4px;
+    background: #f1f5f9;
+    padding: 3px;
+    border-radius: 8px;
+}
+
+.decision-toggle-btn {
+    border: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.decision-toggle-btn.bought-active {
+    background: #10b981;
+    color: #ffffff;
+}
+
+.decision-toggle-btn.bought-inactive {
+    background: transparent;
+    color: #475569;
+}
+
+.decision-toggle-btn.restock-active {
+    background: #f59e0b;
+    color: #ffffff;
+}
+
+.decision-toggle-btn.restock-inactive {
+    background: transparent;
+    color: #475569;
+}
+
+/* =========================================================
+   AUTH ROLE SELECTOR TABS
+========================================================= */
+
+.auth-role-tabs {
+    display: flex;
+    gap: 8px;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+}
+
+.auth-role-tab {
+    flex: 1;
+    padding: 8px 14px;
+    border-radius: 9px;
+    border: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s ease;
+}
+
+.auth-role-tab.active {
+    background: #ffffff;
+    color: var(--ink);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.auth-role-tab.active-store {
+    background: var(--ink);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }

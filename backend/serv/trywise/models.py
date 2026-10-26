@@ -35,6 +35,7 @@ class Product(models.Model):
         default=ProductCategory.MEN
     )
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Original / MRP price for sale discounts")
     image = models.ImageField(upload_to='products/', null=True, blank=True)
 
     # Size inventory counts (Each size is a column as requested)
@@ -82,11 +83,14 @@ class Order(models.Model):
         related_name='orders'
     )
     total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    final_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Final bill value after unpurchased items are restocked")
     status = models.CharField(
         max_length=30,
         choices=OrderStatus.choices,
         default=OrderStatus.PENDING
     )
+    ready_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when order was marked Ready for Pickup")
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Deadline for customer trial before auto-cancellation")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -95,6 +99,12 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.id} by {self.customer.username} - {self.status}"
+
+
+class OrderItemStatus(models.TextChoices):
+    RESERVED = 'reserved', 'Reserved'
+    PURCHASED = 'purchased', 'Purchased'
+    RESTOCKED = 'restocked', 'Restocked'
 
 
 class OrderItem(models.Model):
@@ -120,8 +130,47 @@ class OrderItem(models.Model):
     size = models.CharField(max_length=5)  # 'S', 'M', 'L', 'XL'
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(
+        max_length=20,
+        choices=OrderItemStatus.choices,
+        default=OrderItemStatus.RESERVED
+    )
+    is_restocked = models.BooleanField(
+        default=False,
+        help_text="Flag to indicate whether unpurchased item stock was returned to inventory"
+    )
 
     def __str__(self):
         name = self.product.name if self.product else (self.product_name or "Deleted Product")
-        return f"{name} (Size: {self.size}, Qty: {self.quantity})"
+        return f"{name} (Size: {self.size}, Qty: {self.quantity}, Status: {self.status})"
+
+
+class OTPPurpose(models.TextChoices):
+    EMAIL_VERIFICATION = 'email_verification', 'Email Verification'
+    STORE_LOGIN = 'store_login', 'Store Owner Login'
+    PASSWORD_RESET = 'password_reset', 'Password Reset'
+
+
+class EmailOTP(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='email_otps'
+    )
+    code = models.CharField(max_length=6)
+    purpose = models.CharField(
+        max_length=30,
+        choices=OTPPurpose.choices,
+        default=OTPPurpose.STORE_LOGIN
+    )
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"OTP for {self.user.email} ({self.purpose}) - Used: {self.is_used}"
+
 
