@@ -218,11 +218,13 @@ export default function StoreRequests({ onOpenLogin }) {
 
       // Attach custom or default hold duration when moving to Ready for Pickup
       const holdOverride = orderHoldOverrides[orderId] || { value: policyValue, unit: policyUnit };
+      const isMovingToReady = newStatus === "Ready for Pickup";
       const payload = {
         status: newStatus,
         item_actions: newStatus === "Completed" ? item_actions : [],
-        hold_duration_value: newStatus === "Ready for Pickup" ? holdOverride.value : undefined,
-        hold_duration_unit: newStatus === "Ready for Pickup" ? holdOverride.unit : undefined,
+        hold_duration_value: isMovingToReady ? holdOverride.value : undefined,
+        hold_duration_unit: isMovingToReady ? holdOverride.unit : undefined,
+        notify_ready: isMovingToReady,
       };
 
       const updated = await updateOrderStatusWithItems(orderId, payload, tokens?.access);
@@ -230,6 +232,12 @@ export default function StoreRequests({ onOpenLogin }) {
       setOrders((prev) =>
         prev.map((ord) => (ord.id === orderId ? { ...ord, ...updated } : ord))
       );
+
+      if (isMovingToReady) {
+        showToast("Items marked Ready for Try On! Customer notified via email.", "success");
+      } else if (newStatus === "Accepted") {
+        showToast("Order accepted! Customer notified via email.", "success");
+      }
 
       // Re-synchronize item decisions from the updated order items
       if (updated?.items) {
@@ -580,7 +588,7 @@ export default function StoreRequests({ onOpenLogin }) {
                             onClick={() => handleUpdateHoldDeadline(order.id)}
                             disabled={updatingId === order.id}
                             className="order-hold-update-btn"
-                            title="Apply custom duration and extend deadline for this customer"
+                            title="Apply custom duration calculated from original reservation time"
                           >
                             {updatingId === order.id ? "..." : holdUpdateSuccess[order.id] ? "✓ Updated" : "Update"}
                           </button>

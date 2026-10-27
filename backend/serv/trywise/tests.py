@@ -519,6 +519,64 @@ class ProductOrderAndRevenueAPITests(TestCase):
         self.assertIn("Trial Reservation Updated", shorten_email.subject)
         self.assertIn("15 minutes", shorten_email.body)
 
+    def test_trial_reservation_anchored_to_original_ready_at_and_notify_ready(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        self.client.force_authenticate(user=self.store_owner)
+        mail.outbox.clear()
+
+        # Step 1: Initial reservation at 11:00 for 5 minutes
+        fixed_ready_at = timezone.now() - timedelta(minutes=1) # 1 minute ago (11:00)
+        p = Product.objects.create(name='Polo', category='Men', price=1000, size_m=5, created_by=self.store_owner)
+        order = Order.objects.create(
+            customer=self.customer,
+            total_price=1000.00,
+            status=OrderStatus.READY,
+            ready_at=fixed_ready_at,
+            expires_at=fixed_ready_at + timedelta(minutes=5)
+        )
+        OrderItem.objects.create(order=order, product=p, size='M', quantity=1, price=1000)
+
+        order_url = reverse('order-detail', kwargs={'pk': order.id})
+
+        # Step 2: At 11:01, store owner updates duration to 6 minutes
+        res_6min = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 6,
+            'hold_duration_unit': 'minutes'
+        }, format='json')
+        self.assertEqual(res_6min.status_code, status.HTTP_200_OK)
+
+        order.refresh_from_db()
+        # Original ready_at must NOT change:
+        self.assertEqual(order.ready_at, fixed_ready_at)
+        # Expiration must be calculated from fixed_ready_at (11:00 + 6m = 11:06):
+        self.assertEqual(order.expires_at, fixed_ready_at + timedelta(minutes=6))
+
+        # Step 3: Store owner updates duration to 4 minutes
+        res_4min = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 4,
+            'hold_duration_unit': 'minutes'
+        }, format='json')
+        self.assertEqual(res_4min.status_code, status.HTTP_200_OK)
+
+        order.refresh_from_db()
+        self.assertEqual(order.ready_at, fixed_ready_at)
+        self.assertEqual(order.expires_at, fixed_ready_at + timedelta(minutes=4))
+
+        # Step 4: Resend ready email with notify_ready: True
+        mail.outbox.clear()
+        res_ready = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'notify_ready': True
+        }, format='json')
+        self.assertEqual(res_ready.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(mail.outbox), 1)
+        self.assertIn("Ready to Try On", mail.outbox[-1].subject)
+
+
 
 
 

@@ -1072,20 +1072,37 @@ class OrderDetailView(APIView):
                 old_expires_at = order.expires_at
                 deadline_updated = False
                 is_extended = True
+                notify_ready = bool(request.data.get('notify_ready'))
 
-                if new_status == OrderStatus.READY and (old_status != OrderStatus.READY or not order.expires_at or custom_val is not None):
-                    order.ready_at = timezone.now()
-                    order.expires_at = timezone.now() + hold_delta
-                    update_fields.extend(['ready_at', 'expires_at'])
+                if new_status == OrderStatus.READY:
+                    # Transitioning to Ready for Pickup for the first time
+                    if old_status != OrderStatus.READY or not order.ready_at:
+                        order.ready_at = timezone.now()
+                        order.expires_at = order.ready_at + hold_delta
+                        update_fields.extend(['ready_at', 'expires_at'])
+                    elif custom_val is not None or not order.expires_at:
+                        # Order was ALREADY in Ready for Pickup:
+                        # Preserve original ready_at! Calculate new expiration from the original reservation time.
+                        base_time = order.ready_at
+                        # Edge case: if calculated deadline from original ready_at is already in the past, anchor to now
+                        if (base_time + hold_delta) <= timezone.now():
+                            base_time = timezone.now()
+                            order.ready_at = base_time
+                            if 'ready_at' not in update_fields:
+                                update_fields.append('ready_at')
 
-                    if old_status == OrderStatus.READY and old_expires_at:
-                        diff_sec = (order.expires_at - old_expires_at).total_seconds()
-                        if abs(diff_sec) > 5:
-                            deadline_updated = True
-                            is_extended = diff_sec > 0
-                            order.is_deadline_updated = True
-                            if 'is_deadline_updated' not in update_fields:
-                                update_fields.append('is_deadline_updated')
+                        order.expires_at = base_time + hold_delta
+                        if 'expires_at' not in update_fields:
+                            update_fields.append('expires_at')
+
+                        if old_expires_at:
+                            diff_sec = (order.expires_at - old_expires_at).total_seconds()
+                            if abs(diff_sec) > 5:
+                                deadline_updated = True
+                                is_extended = diff_sec > 0
+                                order.is_deadline_updated = True
+                                if 'is_deadline_updated' not in update_fields:
+                                    update_fields.append('is_deadline_updated')
 
                 order.status = new_status
                 order.save(update_fields=update_fields)
@@ -1097,7 +1114,7 @@ class OrderDetailView(APIView):
                 except Exception as mail_err:
                     logger.error(f"Failed to send accepted email to customer for #{order.id}: {mail_err}")
 
-            elif old_status != OrderStatus.READY and new_status == OrderStatus.READY:
+            elif (old_status != OrderStatus.READY and new_status == OrderStatus.READY) or (new_status == OrderStatus.READY and notify_ready):
                 try:
                     send_order_ready_email_to_customer(order)
                 except Exception as mail_err:
