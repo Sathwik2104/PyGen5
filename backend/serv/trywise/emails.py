@@ -1,4 +1,8 @@
+import os
+import json
 import logging
+import urllib.request
+import urllib.error
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.utils import timezone
@@ -6,8 +10,71 @@ from .models import User, UserRole
 
 logger = logging.getLogger(__name__)
 
+
+def _send_via_brevo_api(api_key, sender_email, sender_name, subject, text_content, html_content, recipient_list):
+    """
+    Sends an email via Brevo's HTTPS REST API over Port 443.
+    Bypasses cloud provider SMTP port blocks (such as Render's block on port 587).
+    """
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json",
+        "user-agent": "TryWise/1.0"
+    }
+    payload = {
+        "sender": {
+            "name": sender_name,
+            "email": sender_email
+        },
+        "to": [{"email": email.strip()} for email in recipient_list if email and email.strip()],
+        "subject": subject,
+        "htmlContent": html_content,
+        "textContent": text_content
+    }
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+    with urllib.request.urlopen(req, timeout=12) as response:
+        if response.status in (200, 201, 202):
+            logger.info(f"Successfully sent email via Brevo HTTPS (Port 443) to {recipient_list}")
+            return True
+        return False
+
+
 def _send_html_email(subject, text_content, html_content, recipient_list):
-    """Internal helper to dispatch multi-part HTML & text emails safely."""
+    """
+    Internal helper to dispatch multi-part HTML & text emails safely.
+    Priority 1: Brevo HTTPS REST API (Port 443) when BREVO_API_KEY is configured.
+    Priority 2: Standard Django SMTP (for local development or unblocked SMTP environments).
+    """
+    brevo_api_key = os.environ.get('BREVO_API_KEY', '').strip()
+    if brevo_api_key:
+        try:
+            sender_email = (
+                os.environ.get('BREVO_SENDER_EMAIL') or
+                os.environ.get('EMAIL_HOST_USER') or
+                'trywise48@gmail.com'
+            ).strip()
+            sender_name = os.environ.get('BREVO_SENDER_NAME', 'TryWise').strip()
+            success = _send_via_brevo_api(
+                api_key=brevo_api_key,
+                sender_email=sender_email,
+                sender_name=sender_name,
+                subject=subject,
+                text_content=text_content,
+                html_content=html_content,
+                recipient_list=recipient_list
+            )
+            if success:
+                return True
+        except urllib.error.HTTPError as http_err:
+            error_body = http_err.read().decode('utf-8', errors='ignore')
+            logger.error(f"Brevo HTTPS API HTTP {http_err.code} error: {error_body}")
+        except Exception as e:
+            logger.error(f"Brevo HTTPS API request failed: {e}")
+
+    # Fallback to standard Django SMTP
     try:
         from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'TryWise <no-reply@trywise.com>')
         msg = EmailMultiAlternatives(
@@ -27,7 +94,15 @@ def _send_html_email(subject, text_content, html_content, recipient_list):
 def send_registration_otp_email(user, otp_code):
     """Sends 6-digit email verification OTP upon registration."""
     subject = f"TryWise - Verify Your Email (Code: {otp_code})"
-    greeting_name = user.first_name or user.username
+    if isinstance(user, dict):
+        greeting_name = user.get('first_name') or user.get('username') or "there"
+        email = user.get('email')
+        role_label = "Store Owner" if user.get('role') == UserRole.STORE_OWNER else "Customer"
+    else:
+        greeting_name = user.first_name or user.username
+        email = user.email
+        role_label = user.get_role_display() if hasattr(user, 'get_role_display') else "TryWise"
+
     text_content = (
         f"Hello {greeting_name},\n\n"
         f"Thank you for registering on TryWise! To complete your registration and activate your account, "
@@ -46,7 +121,7 @@ def send_registration_otp_email(user, otp_code):
         <h2 style="font-size: 20px; color: #1e293b; margin-top: 0;">Verify Your Email Address</h2>
         <p style="color: #475569; font-size: 15px; line-height: 1.6;">
             Hello <strong>{greeting_name}</strong>,<br>
-            Welcome to TryWise! Please enter the 6-digit verification code below to activate your {user.get_role_display()} account:
+            Welcome to TryWise! Please enter the 6-digit verification code below to activate your {role_label} account:
         </p>
         <div style="text-align: center; margin: 28px 0;">
             <div style="display: inline-block; padding: 14px 28px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #4338ca; background-color: #eef2ff; border-radius: 8px; border: 1px dashed #6366f1;">
@@ -63,7 +138,7 @@ def send_registration_otp_email(user, otp_code):
         </p>
     </div>
     """
-    return _send_html_email(subject, text_content, html_content, [user.email])
+    return _send_html_email(subject, text_content, html_content, [email])
 
 
 def send_store_login_otp_email(user, otp_code):
@@ -152,45 +227,51 @@ def send_password_reset_otp_email(user, otp_code):
     return _send_html_email(subject, text_content, html_content, [user.email])
 
 
-def send_welcome_login_email(user):
-    """Sends a friendly welcome/login notification upon successful sign-in."""
-    subject = "TryWise - Successful Login Notification"
+def send_welcome_registration_email(user):
+    """Sends a friendly welcome notification upon successful account registration."""
+    subject = "🎉 Welcome to TryWise - Registered Successfully!"
     greeting_name = user.first_name or user.username
     local_now = timezone.localtime(timezone.now())
     now_str = local_now.strftime("%B %d, %Y at %I:%M %p")
     text_content = (
         f"Hello {greeting_name},\n\n"
-        f"You have successfully logged in to your TryWise account on {now_str}.\n"
+        f"Welcome to TryWise! Your account ({user.email}) has been registered and verified successfully on {now_str}.\n"
         f"Role: {user.get_role_display()}\n\n"
-        f"If this was not you, please reset your password immediately.\n\n"
-        f"Happy shopping & trials,\n"
+        f"You can now explore products, reserve sizes in your fitting bag, and enjoy smart in-store trial shopping!\n\n"
+        f"Happy shopping,\n"
         f"The TryWise Team"
     )
     html_content = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 28px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 24px;">
             <h1 style="font-size: 26px; font-weight: 800; color: #0f172a; margin: 0;">Try<span style="color: #6366f1;">Wise</span></h1>
+            <span style="display: inline-block; margin-top: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; color: #047857; background: #ecfdf5; border-radius: 12px; text-transform: uppercase;">
+                Account Activated
+            </span>
         </div>
-        <h2 style="font-size: 20px; color: #1e293b; margin-top: 0;">Successful Sign-In</h2>
+        <h2 style="font-size: 20px; color: #1e293b; margin-top: 0;">Registration Successful! 🎉</h2>
         <p style="color: #475569; font-size: 15px; line-height: 1.6;">
             Hello <strong>{greeting_name}</strong>,<br>
-            You have successfully logged in to your TryWise account.
+            Welcome to TryWise! Your account has been verified and registered successfully.
         </p>
         <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 20px 0;">
             <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Account:</strong> {user.email}</p>
             <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Role:</strong> {user.get_role_display()}</p>
-            <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Timestamp:</strong> {now_str}</p>
+            <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Registered On:</strong> {now_str}</p>
         </div>
         <p style="color: #64748b; font-size: 13px; line-height: 1.5;">
-            If you did not sign in recently, please protect your account by resetting your password immediately.
+            Explore our curated collections, reserve pieces to try on in store, and pay only for what fits you best.
         </p>
         <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;">
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
-            © {timezone.now().year} TryWise Security Center
+            © {timezone.now().year} TryWise Smart In-Store Shopping
         </p>
     </div>
     """
     return _send_html_email(subject, text_content, html_content, [user.email])
+
+# Alias for backward compatibility
+send_welcome_login_email = send_welcome_registration_email
 
 
 def send_new_order_email_to_owners(order):

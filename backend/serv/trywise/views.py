@@ -24,7 +24,7 @@ from .emails import (
     send_password_reset_otp_email,
     send_registration_otp_email,
     send_store_login_otp_email,
-    send_welcome_login_email,
+    send_welcome_registration_email
 )
 from .models import (
     EmailOTP,
@@ -68,6 +68,9 @@ def get_tokens_for_user(user):
     }
 
 
+_REGISTRATION_STORE = {}
+
+
 def make_temp_token(user_id):
     """Generates a cryptographically signed temporary token containing user_id."""
     return signing.dumps({'user_id': user_id}, salt='trywise_otp_salt')
@@ -78,6 +81,19 @@ def read_temp_token(token, max_age=900):
     try:
         data = signing.loads(token, salt='trywise_otp_salt', max_age=max_age)
         return data.get('user_id')
+    except Exception:
+        return None
+
+
+def make_registration_token(reg_data):
+    """Generates a cryptographically signed temporary token holding pending registration data."""
+    return signing.dumps(reg_data, salt='trywise_reg_salt')
+
+
+def read_registration_token(token, max_age=900):
+    """Decodes registration payload from temporary signed token (valid for 15 minutes)."""
+    try:
+        return signing.loads(token, salt='trywise_reg_salt', max_age=max_age)
     except Exception:
         return None
 
@@ -119,27 +135,67 @@ def generate_and_send_otp(user, purpose):
 
 class RegisterView(APIView):
     """
-    POST: Register a new Customer or Store Owner.
-    Creates account in inactive state (is_active=False) and sends 6-digit Email OTP.
+    POST: Pre-registers a Customer or Store Owner without creating a database row.
+    Validates form data, generates 6-digit Email OTP, and delivers it via email.
+    The account is only created in the database once the OTP is successfully verified!
     """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.save()
-            # Deactivate until OTP is verified
-            user.is_active = False
-            user.save(update_fields=['is_active'])
+            val_data = serializer.validated_data
+            full_name = val_data.get('full_name', '')
+            first_name = ''
+            last_name = ''
+            if full_name:
+                name_parts = full_name.strip().split(' ', 1)
+                first_name = name_parts[0]
+                if len(name_parts) > 1:
+                    last_name = name_parts[1]
 
-            generate_and_send_otp(user, OTPPurpose.EMAIL_VERIFICATION)
-            temp_token = make_temp_token(user.id)
+            email = val_data['email'].strip().lower()
+            username = val_data.get('username') or email.split('@')[0]
+            role = val_data.get('role', UserRole.CUSTOMER)
+            phone_number = val_data.get('phone_number', '')
+            raw_password = val_data['password']
+
+            # Double check existing user
+            if User.objects.filter(email__iexact=email).exists():
+                return Response({'email': ['An account with this email already exists.']}, status=status.HTTP_400_BAD_REQUEST)
+
+            code = f"{random.randint(100000, 999999)}"
+            expires_at = (timezone.now() + timedelta(minutes=10)).timestamp()
+
+            reg_payload = {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'role': role,
+                'phone_number': phone_number,
+                'password': raw_password,
+                'otp': code,
+                'expires_at': expires_at,
+            }
+
+            temp_token = make_registration_token(reg_payload)
+            _REGISTRATION_STORE[email] = {
+                'otp': code,
+                'expires_at': expires_at,
+                'reg_payload': reg_payload,
+            }
+
+            print(f"\n>> [TRYWISE REGISTRATION OTP] For {username} ({email}): {code} <<\n")
+
+            # Dispatch registration OTP email
+            send_registration_otp_email({'first_name': first_name, 'username': username, 'email': email, 'role': role}, code)
 
             return Response({
                 'verification_required': True,
-                'message': f"A 6-digit verification code has been sent to {user.email}.",
-                'email': user.email,
-                'role': user.role,
+                'message': f"A 6-digit verification code has been sent to {email}.",
+                'email': email,
+                'role': role,
                 'temp_token': temp_token,
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -147,7 +203,7 @@ class RegisterView(APIView):
 
 class VerifyRegistrationOTPView(APIView):
     """
-    POST: Verifies 6-digit registration OTP, activates account, and issues tokens.
+    POST: Verifies 6-digit registration OTP, creates account in DB, and issues tokens.
     """
     permission_classes = [permissions.AllowAny]
 
@@ -157,48 +213,107 @@ class VerifyRegistrationOTPView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         temp_token = serializer.validated_data['temp_token']
-        otp = serializer.validated_data['otp']
+        otp = serializer.validated_data['otp'].strip()
 
-        user_id = read_temp_token(temp_token)
-        if not user_id:
+        reg_data = read_registration_token(temp_token)
+        if not reg_data:
+            # Fallback for legacy token format
+            user_id = read_temp_token(temp_token)
+            if user_id:
+                try:
+                    legacy_user = User.objects.get(id=user_id)
+                    otp_obj = EmailOTP.objects.filter(
+                        user=legacy_user,
+                        purpose=OTPPurpose.EMAIL_VERIFICATION,
+                        code=otp,
+                        is_used=False,
+                        expires_at__gte=timezone.now()
+                    ).first()
+                    if otp_obj:
+                        otp_obj.is_used = True
+                        otp_obj.save(update_fields=['is_used'])
+                        legacy_user.is_active = True
+                        legacy_user.save(update_fields=['is_active'])
+                        send_welcome_registration_email(legacy_user)
+                        tokens = get_tokens_for_user(legacy_user)
+                        return Response({
+                            'message': 'Account verified and registered successfully!',
+                            'user': UserSerializer(legacy_user).data,
+                            'tokens': tokens,
+                        }, status=status.HTTP_200_OK)
+                except User.DoesNotExist:
+                    pass
+
             return Response(
-                {'detail': 'Session expired or invalid. Please try registering again.'},
+                {'detail': 'Verification session expired or invalid. Please try registering again.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'detail': 'User account not found.'}, status=status.HTTP_404_NOT_FOUND)
+        email = reg_data.get('email', '').lower()
+        now_ts = timezone.now().timestamp()
 
-        otp_obj = EmailOTP.objects.filter(
-            user=user,
-            purpose=OTPPurpose.EMAIL_VERIFICATION,
-            code=otp,
-            is_used=False,
-            expires_at__gte=timezone.now()
-        ).first()
+        # Check in memory store or token for latest OTP and expiry
+        cached = _REGISTRATION_STORE.get(email)
+        valid_otp = cached['otp'] if cached else reg_data.get('otp')
+        expires_at = cached['expires_at'] if cached else reg_data.get('expires_at', 0)
 
-        if not otp_obj:
+        if now_ts > expires_at:
             return Response(
-                {'detail': 'Invalid or expired verification code. Please check your email or resend code.'},
+                {'detail': 'Verification code has expired. Please request a new code.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Mark OTP used and activate user
-        otp_obj.is_used = True
-        otp_obj.save(update_fields=['is_used'])
+        if valid_otp != otp:
+            return Response(
+                {'detail': 'Invalid verification code. Please check your email or resend code.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        user.is_active = True
-        user.save(update_fields=['is_active'])
+        # Ensure email not registered concurrently
+        if User.objects.filter(email__iexact=email).exists():
+            return Response(
+                {'detail': 'An account with this email is already registered.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # Send welcome email
-        send_welcome_login_email(user)
+        # Single Store Owner Restriction check
+        if reg_data.get('role') == UserRole.STORE_OWNER:
+            if User.objects.filter(role=UserRole.STORE_OWNER).exists():
+                return Response(
+                    {'detail': 'Store owner registration is closed. Only a single authorized store owner is allowed.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Ensure username uniqueness
+        base_username = reg_data['username']
+        username = base_username
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+
+        # Create user in database (active upon creation)
+        user = User.objects.create_user(
+            username=username,
+            email=reg_data['email'],
+            password=reg_data['password'],
+            first_name=reg_data.get('first_name', ''),
+            last_name=reg_data.get('last_name', ''),
+            role=reg_data.get('role', UserRole.CUSTOMER),
+            phone_number=reg_data.get('phone_number', ''),
+            is_active=True
+        )
+
+        # Clean up transient cache
+        _REGISTRATION_STORE.pop(email, None)
+
+        # Send welcome registration email
+        send_welcome_registration_email(user)
 
         tokens = get_tokens_for_user(user)
         user_data = UserSerializer(user).data
         return Response({
-            'message': 'Account verified and activated successfully!',
+            'message': 'Account verified and registered successfully!',
             'user': user_data,
             'tokens': tokens,
         }, status=status.HTTP_200_OK)
@@ -215,19 +330,44 @@ class ResendRegistrationOTPView(APIView):
         if not temp_token:
             return Response({'detail': 'temp_token is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        reg_data = read_registration_token(temp_token)
+        if reg_data:
+            email = reg_data.get('email', '').lower()
+            cached = _REGISTRATION_STORE.get(email)
+            payload = cached.get('reg_payload', reg_data) if cached else reg_data
+
+            new_code = f"{random.randint(100000, 999999)}"
+            expires_at = (timezone.now() + timedelta(minutes=10)).timestamp()
+            payload['otp'] = new_code
+            payload['expires_at'] = expires_at
+
+            new_temp_token = make_registration_token(payload)
+            _REGISTRATION_STORE[email] = {
+                'otp': new_code,
+                'expires_at': expires_at,
+                'reg_payload': payload,
+            }
+
+            print(f"\n>> [TRYWISE RESEND REGISTRATION OTP] For {payload.get('username')} ({email}): {new_code} <<\n")
+            send_registration_otp_email(payload, new_code)
+            return Response({
+                'message': f"A new verification code has been sent to {email}.",
+                'temp_token': new_temp_token,
+            }, status=status.HTTP_200_OK)
+
+        # Fallback for legacy token format (where user exists in DB)
         user_id = read_temp_token(temp_token)
-        if not user_id:
-            return Response({'detail': 'Session expired. Please register again.'}, status=status.HTTP_400_BAD_REQUEST)
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id)
+                generate_and_send_otp(user, OTPPurpose.EMAIL_VERIFICATION)
+                return Response({
+                    'message': f"A new verification code has been sent to {user.email}."
+                }, status=status.HTTP_200_OK)
+            except User.DoesNotExist:
+                pass
 
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        generate_and_send_otp(user, OTPPurpose.EMAIL_VERIFICATION)
-        return Response({
-            'message': f"A new verification code has been sent to {user.email}."
-        }, status=status.HTTP_200_OK)
+        return Response({'detail': 'Session expired. Please register again.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(APIView):
@@ -344,9 +484,6 @@ class VerifyLoginOTPView(APIView):
         # Mark OTP as used
         otp_obj.is_used = True
         otp_obj.save(update_fields=['is_used'])
-
-        # Send welcome/login email
-        send_welcome_login_email(user)
 
         tokens = get_tokens_for_user(user)
         user_data = UserSerializer(user).data
