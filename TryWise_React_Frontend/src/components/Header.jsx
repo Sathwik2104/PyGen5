@@ -55,14 +55,8 @@ export default function Header({
         {isStoreOwner && (
           <>
             <button
-              className="pill"
+              className="pill pill-primary"
               onClick={onOpenAddProduct}
-              style={{
-                background: "var(--ink)",
-                color: "#fff",
-                fontWeight: "700",
-                border: "none",
-              }}
             >
               + Add Product
             </button>
@@ -86,8 +80,24 @@ export default function Header({
         <button
           className="profile"
           onClick={() => setProfileOpen(!profileOpen)}
+          aria-expanded={profileOpen}
+          title="Account Profile"
         >
-          ◉ {user ? user.first_name || user.username : "Profile"} ⌄
+          <span>{user ? user.first_name || user.username : "Profile"}</span>
+          <span className={`profile-caret ${profileOpen ? "open" : ""}`}>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
         </button>
 
         {/* PROFILE DROPDOWN */}

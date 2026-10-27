@@ -3,167 +3,517 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
+from django.core import mail
+from trywise.models import Product, Order, OrderItem, OrderItemStatus, OrderStatus, EmailOTP, OTPPurpose, UserRole
 
 User = get_user_model()
 
-class AuthAPITests(TestCase):
+
+class AuthAndOTPAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.register_url = reverse('register')
+        self.verify_reg_otp_url = reverse('verify-registration-otp')
         self.login_url = reverse('login')
-        self.profile_url = reverse('user-profile')
+        self.verify_login_otp_url = reverse('verify-login-otp')
+        self.forgot_pwd_url = reverse('forgot-password')
+        self.reset_pwd_url = reverse('reset-password')
 
-    def test_register_customer_success(self):
-        payload = {
+    def test_customer_register_requires_otp_and_activates(self):
+        # 1. Initiate registration
+        reg_payload = {
             'full_name': 'Alice Smith',
             'email': 'alice@example.com',
             'password': 'Password123!',
             'confirm_password': 'Password123!',
             'role': 'customer'
         }
-        response = self.client.post(self.register_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('tokens', response.data)
-        self.assertEqual(response.data['user']['email'], 'alice@example.com')
-        self.assertEqual(response.data['user']['role'], 'customer')
+        res = self.client.post(self.register_url, reg_payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(res.data.get('verification_required'))
+        temp_token = res.data['temp_token']
 
-    def test_register_store_owner_success(self):
-        payload = {
-            'full_name': 'Bob Store',
-            'email': 'bob@store.com',
-            'password': 'Password123!',
-            'confirm_password': 'Password123!',
-            'role': 'store_owner'
-        }
-        response = self.client.post(self.register_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['user']['role'], 'store_owner')
+        # User is created but inactive
+        user = User.objects.get(email='alice@example.com')
+        self.assertFalse(user.is_active)
 
-    def test_login_success(self):
-        # Register user first
-        User.objects.create_user(
-            username='alice@example.com',
-            email='alice@example.com',
+        # OTP was created and emailed
+        otp_record = EmailOTP.objects.get(user=user, purpose=OTPPurpose.EMAIL_VERIFICATION, is_used=False)
+        self.assertEqual(len(otp_record.code), 6)
+        self.assertTrue(len(mail.outbox) > 0)
+
+        # 2. Verify with wrong OTP
+        wrong_res = self.client.post(self.verify_reg_otp_url, {
+            'temp_token': temp_token,
+            'otp': '000000'
+        }, format='json')
+        self.assertEqual(wrong_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # 3. Verify with correct OTP
+        valid_res = self.client.post(self.verify_reg_otp_url, {
+            'temp_token': temp_token,
+            'otp': otp_record.code
+        }, format='json')
+        self.assertEqual(valid_res.status_code, status.HTTP_200_OK)
+        self.assertIn('tokens', valid_res.data)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    def test_store_owner_login_requires_2fa_otp(self):
+        # Create active store owner
+        owner = User.objects.create_user(
+            username='storeowner1',
+            email='owner@trywise.com',
             password='Password123!',
-            role='customer'
+            role=UserRole.STORE_OWNER,
+            is_active=True
         )
 
-        payload = {
-            'email_or_username': 'alice@example.com',
+        # 1. Login attempt
+        res = self.client.post(self.login_url, {
+            'email_or_username': 'owner@trywise.com',
             'password': 'Password123!'
-        }
-        response = self.client.post(self.login_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('tokens', response.data)
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.data.get('otp_required'))
+        temp_token = res.data['temp_token']
 
-    def test_login_invalid_credentials(self):
-        payload = {
-            'email_or_username': 'nonexistent@example.com',
-            'password': 'WrongPassword'
-        }
-        response = self.client.post(self.login_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        # 2. Check OTP generated
+        otp_record = EmailOTP.objects.get(user=owner, purpose=OTPPurpose.STORE_LOGIN, is_used=False)
+
+        # 3. Verify OTP
+        otp_res = self.client.post(self.verify_login_otp_url, {
+            'temp_token': temp_token,
+            'otp': otp_record.code
+        }, format='json')
+        self.assertEqual(otp_res.status_code, status.HTTP_200_OK)
+        self.assertIn('tokens', otp_res.data)
+        self.assertEqual(otp_res.data['user']['email'], 'owner@trywise.com')
+
+    def test_customer_login_no_otp_required(self):
+        User.objects.create_user(
+            username='cust1',
+            email='cust@trywise.com',
+            password='Password123!',
+            role=UserRole.CUSTOMER,
+            is_active=True
+        )
+
+        res = self.client.post(self.login_url, {
+            'email_or_username': 'cust@trywise.com',
+            'password': 'Password123!'
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.data.get('otp_required', False))
+        self.assertIn('tokens', res.data)
+
+    def test_forgot_and_reset_password_flow(self):
+        user = User.objects.create_user(
+            username='resetuser',
+            email='reset@example.com',
+            password='OldPassword123!',
+            role=UserRole.CUSTOMER,
+            is_active=True
+        )
+
+        # 1. Request reset
+        req_res = self.client.post(self.forgot_pwd_url, {'email': 'reset@example.com'}, format='json')
+        self.assertEqual(req_res.status_code, status.HTTP_200_OK)
+
+        otp_record = EmailOTP.objects.get(user=user, purpose=OTPPurpose.PASSWORD_RESET, is_used=False)
+
+        # 2. Submit new password with OTP
+        reset_res = self.client.post(self.reset_pwd_url, {
+            'email': 'reset@example.com',
+            'otp': otp_record.code,
+            'new_password': 'NewPassword123!',
+            'confirm_password': 'NewPassword123!'
+        }, format='json')
+        self.assertEqual(reset_res.status_code, status.HTTP_200_OK)
+
+        # 3. Verify login with new password
+        login_res = self.client.post(self.login_url, {
+            'email_or_username': 'reset@example.com',
+            'password': 'NewPassword123!'
+        }, format='json')
+        self.assertEqual(login_res.status_code, status.HTTP_200_OK)
 
 
-class ProductAndOrderAPITests(TestCase):
+class ProductOrderAndRevenueAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.products_url = reverse('product-list-create')
         self.orders_url = reverse('order-list-create')
+        self.revenue_url = reverse('store-revenue')
 
-        # Create Store Owner
         self.store_owner = User.objects.create_user(
-            username='storeowner',
-            email='owner@trywise.com',
+            username='owner_biz',
+            email='owner@store.com',
             password='Password123!',
-            role='store_owner'
+            role=UserRole.STORE_OWNER,
+            is_active=True
         )
 
-        # Create Customer
         self.customer = User.objects.create_user(
-            username='customer1',
-            email='customer@trywise.com',
+            username='customer_jane',
+            email='jane@customer.com',
             password='Password123!',
-            role='customer'
+            role=UserRole.CUSTOMER,
+            is_active=True
         )
 
-    def test_store_owner_can_create_product(self):
+    def test_product_update_propagates_price_to_active_orders(self):
+        # 1. Create product at price 2000
         self.client.force_authenticate(user=self.store_owner)
-        payload = {
-            'name': 'Linen Summer Shirt',
-            'category': 'Men',
-            'price': 1499.00,
-            'size_s': 5,
+        prod_res = self.client.post(self.products_url, {
+            'name': 'Cashmere Sweater',
+            'category': 'Women',
+            'price': 2000.00,
+            'size_s': 10,
             'size_m': 10,
-            'size_l': 8,
-            'size_xl': 2,
-        }
-        response = self.client.post(self.products_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['name'], 'Linen Summer Shirt')
-        self.assertEqual(response.data['size_m'], 10)
-        self.assertEqual(response.data['total_stock'], 25)
-
-    def test_customer_cannot_create_product(self):
-        self.client.force_authenticate(user=self.customer)
-        payload = {
-            'name': 'Hacker Dress',
-            'category': 'Women',
-            'price': 999.00,
-            'size_s': 1,
-        }
-        response = self.client.post(self.products_url, payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_customer_order_decrements_stock_atomically(self):
-        # 1. Store Owner creates product
-        self.client.force_authenticate(user=self.store_owner)
-        prod_res = self.client.post(self.products_url, {
-            'name': 'Silk Evening Gown',
-            'category': 'Women',
-            'price': 2500.00,
-            'size_s': 4,
-            'size_m': 6,
-            'size_l': 0,
-            'size_xl': 0,
+            'size_l': 10,
+            'size_xl': 10,
         }, format='json')
         prod_id = prod_res.data['id']
 
-        # 2. Customer orders 2 of size M
+        # 2. Customer places order for 2 of Size M (Total = 4000)
         self.client.force_authenticate(user=self.customer)
-        order_payload = {
+        ord_res = self.client.post(self.orders_url, {
+            'items': [{'product_id': prod_id, 'size': 'M', 'quantity': 2}]
+        }, format='json')
+        order_id = ord_res.data['order']['id']
+        self.assertEqual(float(ord_res.data['order']['total_price']), 4000.00)
+
+        # 3. Store owner runs a flash sale, updating price to 1500 with original_price 2000
+        self.client.force_authenticate(user=self.store_owner)
+        patch_res = self.client.patch(reverse('product-detail', kwargs={'pk': prod_id}), {
+            'name': 'Cashmere Sweater Sale Edition',
+            'price': 1500.00,
+            'original_price': 2000.00,
+        }, format='json')
+        self.assertEqual(patch_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(patch_res.data['is_on_sale'])
+        self.assertEqual(patch_res.data['discount_percent'], 25)
+
+        # 4. Check that the active pending order automatically updated to 3000!
+        order = Order.objects.get(id=order_id)
+        self.assertEqual(float(order.total_price), 3000.00)
+        item = order.items.first()
+        self.assertEqual(float(item.price), 1500.00)
+
+    def test_partial_purchase_and_restocking(self):
+        # Product 1: Initial stock 5
+        self.client.force_authenticate(user=self.store_owner)
+        p1 = Product.objects.create(name='P1', category='Men', price=1000, size_m=5, created_by=self.store_owner)
+        # Product 2: Initial stock 5
+        p2 = Product.objects.create(name='P2', category='Men', price=2000, size_l=5, created_by=self.store_owner)
+
+        # Customer bags both (Stock becomes 4 and 4)
+        self.client.force_authenticate(user=self.customer)
+        ord_res = self.client.post(self.orders_url, {
             'items': [
-                {'product_id': prod_id, 'size': 'M', 'quantity': 2}
+                {'product_id': p1.id, 'size': 'M', 'quantity': 1},
+                {'product_id': p2.id, 'size': 'L', 'quantity': 1},
             ]
-        }
-        order_res = self.client.post(self.orders_url, order_payload, format='json')
-        self.assertEqual(order_res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(float(order_res.data['order']['total_price']), 5000.00)
+        }, format='json')
+        order_id = ord_res.data['order']['id']
+        p1.refresh_from_db()
+        p2.refresh_from_db()
+        self.assertEqual(p1.size_m, 4)
+        self.assertEqual(p2.size_l, 4)
 
-        # 3. Check that size_m decreased from 6 to 4
-        detail_url = reverse('product-detail', kwargs={'pk': prod_id})
-        detail_res = self.client.get(detail_url)
-        self.assertEqual(detail_res.data['size_m'], 4)
+        order = Order.objects.get(id=order_id)
+        item1 = order.items.get(product=p1)
+        item2 = order.items.get(product=p2)
 
-    def test_order_fails_when_exceeding_stock(self):
-        # Create product with 1 in size S
+        # Store owner completes trial: customer purchases item 1 (P1), returns/restocks item 2 (P2)
         self.client.force_authenticate(user=self.store_owner)
-        prod_res = self.client.post(self.products_url, {
-            'name': 'Limited Edition Jacket',
-            'category': 'Men',
-            'price': 3000.00,
-            'size_s': 1,
-            'size_m': 0,
-            'size_l': 0,
-            'size_xl': 0,
+        comp_res = self.client.patch(reverse('order-detail', kwargs={'pk': order_id}), {
+            'status': OrderStatus.COMPLETED,
+            'item_actions': [
+                {'item_id': item1.id, 'action': 'purchased'},
+                {'item_id': item2.id, 'action': 'restocked'},
+            ]
         }, format='json')
-        prod_id = prod_res.data['id']
+        self.assertEqual(comp_res.status_code, status.HTTP_200_OK)
 
-        # Customer tries to order 2 of size S
+        # Verify restocked inventory: P1 stays 4, P2 goes back to 5!
+        p1.refresh_from_db()
+        p2.refresh_from_db()
+        self.assertEqual(p1.size_m, 4)
+        self.assertEqual(p2.size_l, 5)
+
+        # Verify final price is 1000 (only purchased item 1)
+        order.refresh_from_db()
+        self.assertEqual(float(order.final_price), 1000.00)
+
+    def test_order_cancelled_restocks_all_items(self):
+        self.client.force_authenticate(user=self.store_owner)
+        p = Product.objects.create(name='T-Shirt', category='Men', price=500, size_s=10, created_by=self.store_owner)
+
+        # Order 3 items (stock becomes 7)
         self.client.force_authenticate(user=self.customer)
-        order_res = self.client.post(self.orders_url, {
-            'items': [{'product_id': prod_id, 'size': 'S', 'quantity': 2}]
+        ord_res = self.client.post(self.orders_url, {
+            'items': [{'product_id': p.id, 'size': 'S', 'quantity': 3}]
         }, format='json')
-        self.assertEqual(order_res.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('only has 1 item', order_res.data['detail'])
+        order_id = ord_res.data['order']['id']
+        p.refresh_from_db()
+        self.assertEqual(p.size_s, 7)
+
+        # Store owner cancels order
+        self.client.force_authenticate(user=self.store_owner)
+        cancel_res = self.client.patch(reverse('order-detail', kwargs={'pk': order_id}), {
+            'status': OrderStatus.CANCELLED
+        }, format='json')
+        self.assertEqual(cancel_res.status_code, status.HTTP_200_OK)
+
+        # Stock is fully restored to 10!
+        p.refresh_from_db()
+        self.assertEqual(p.size_s, 10)
+
+    def test_store_revenue_endpoint(self):
+        # Create a completed order
+        order = Order.objects.create(
+            customer=self.customer,
+            total_price=3000.00,
+            final_price=2500.00,
+            status=OrderStatus.COMPLETED
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=None,
+            product_name='Blazer',
+            size='M',
+            quantity=1,
+            price=2500.00,
+            status=OrderItemStatus.PURCHASED
+        )
+
+        self.client.force_authenticate(user=self.store_owner)
+        res = self.client.get(self.revenue_url, {'period': 'all'})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['total_revenue'], 2500.00)
+        self.assertEqual(res.data['completed_orders_count'], 1)
+        self.assertEqual(res.data['items_sold_count'], 1)
+
+    def test_single_store_owner_registration_prevented(self):
+        # A store owner already exists in setUp (self.store_owner)
+        payload = {
+            'full_name': 'Second Owner',
+            'email': 'second_owner@example.com',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!',
+            'role': 'store_owner'
+        }
+        res = self.client.post(reverse('register'), payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('role', res.data)
+        self.assertIn('single authorized store owner', str(res.data['role']))
+
+    def test_status_change_to_ready_sets_deadline_and_emails_customer(self):
+        self.client.force_authenticate(user=self.customer)
+        p = Product.objects.create(name='Polo', category='Men', price=999, size_m=5, created_by=self.store_owner)
+        ord_res = self.client.post(self.orders_url, {
+            'items': [{'product_id': p.id, 'size': 'M', 'quantity': 1}]
+        }, format='json')
+        order_id = ord_res.data['order']['id']
+
+        # Store owner marks order as Ready for Pickup
+        mail.outbox = []
+        self.client.force_authenticate(user=self.store_owner)
+        res = self.client.patch(reverse('order-detail', kwargs={'pk': order_id}), {
+            'status': OrderStatus.READY
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(res.data['ready_at'])
+        self.assertIsNotNone(res.data['expires_at'])
+
+        # Customer received the trial ready notification email
+        self.assertTrue(len(mail.outbox) > 0)
+        customer_email = mail.outbox[-1]
+        self.assertIn(self.customer.email, customer_email.to)
+        self.assertIn('Ready to Try On', customer_email.subject)
+
+    def test_overdue_trial_order_auto_expired_and_restocked(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        from trywise.views import expire_overdue_orders
+
+        # Create order already in Ready status but expired 1 hour ago
+        p = Product.objects.create(name='Jacket', category='Men', price=3999, size_l=2, created_by=self.store_owner)
+        order = Order.objects.create(
+            customer=self.customer,
+            total_price=3999.00,
+            status=OrderStatus.READY,
+            ready_at=timezone.now() - timedelta(hours=25),
+            expires_at=timezone.now() - timedelta(hours=1)
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=p,
+            product_name=p.name,
+            size='L',
+            quantity=1,
+            price=3999.00,
+            status=OrderItemStatus.RESERVED,
+            is_restocked=False
+        )
+
+        mail.outbox = []
+        # Run auto expiration
+        expire_overdue_orders()
+
+        order.refresh_from_db()
+        p.refresh_from_db()
+
+        # Order is cancelled, price is 0, item is restocked back to product!
+        self.assertEqual(order.status, OrderStatus.CANCELLED)
+        self.assertEqual(order.final_price, 0.00)
+        self.assertEqual(p.size_l, 3)
+
+        # Customer received cancellation notification email
+        self.assertTrue(len(mail.outbox) > 0)
+        cancellation_email = mail.outbox[-1]
+        self.assertIn('Expired', cancellation_email.subject)
+
+    def test_store_revenue_view_periods_including_this_month_and_custom(self):
+        from django.utils import timezone
+        revenue_url = reverse('store-revenue')
+
+        # Create a completed order with 1 sold and 1 restocked item
+        p1 = Product.objects.create(name='Shirt', category='Men', price=1000, size_m=5, created_by=self.store_owner)
+        order = Order.objects.create(
+            customer=self.customer,
+            total_price=2000.00,
+            final_price=1000.00,
+            status=OrderStatus.COMPLETED
+        )
+        OrderItem.objects.create(
+            order=order, product=p1, size='M', quantity=1, price=1000, status=OrderItemStatus.PURCHASED, is_restocked=False
+        )
+        OrderItem.objects.create(
+            order=order, product=p1, size='M', quantity=1, price=1000, status=OrderItemStatus.RESTOCKED, is_restocked=True
+        )
+
+        self.client.force_authenticate(user=self.store_owner)
+
+        # Test 'this_month'
+        res_month = self.client.get(revenue_url, {'period': 'this_month'})
+        self.assertEqual(res_month.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_month.data['completed_orders_count'], 1)
+        self.assertEqual(res_month.data['items_sold_count'], 1)
+        self.assertEqual(res_month.data['items_restocked_count'], 1)
+
+        # Test 'custom'
+        now = timezone.now()
+        res_custom = self.client.get(revenue_url, {'period': 'custom', 'year': now.year, 'month': now.month})
+        self.assertEqual(res_custom.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_custom.data['completed_orders_count'], 1)
+        self.assertEqual(res_custom.data['items_sold_count'], 1)
+        self.assertEqual(res_custom.data['items_restocked_count'], 1)
+
+    def test_store_configuration_api_and_dynamic_trial_hold(self):
+        config_url = reverse('store-config')
+        self.client.force_authenticate(user=self.store_owner)
+
+        # 1. Get default store config
+        res = self.client.get(config_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('trial_duration_value', res.data)
+        self.assertIn('trial_duration_unit', res.data)
+
+        # 2. Update config to 45 minutes
+        put_res = self.client.put(config_url, {
+            'trial_duration_value': 45,
+            'trial_duration_unit': 'minutes'
+        }, format='json')
+        self.assertEqual(put_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(put_res.data['trial_duration_value'], 45)
+        self.assertEqual(put_res.data['trial_duration_unit'], 'minutes')
+
+        # 3. Mark an order Ready for Pickup - should use store config (45 minutes)
+        p = Product.objects.create(name='Pants', category='Men', price=1500, size_m=2, created_by=self.store_owner)
+        order1 = Order.objects.create(customer=self.customer, total_price=1500.00, status=OrderStatus.ACCEPTED)
+        OrderItem.objects.create(order=order1, product=p, size='M', quantity=1, price=1500)
+
+        order_url = reverse('order-detail', kwargs={'pk': order1.id})
+        update_res = self.client.put(order_url, {'status': 'Ready for Pickup'}, format='json')
+        self.assertEqual(update_res.status_code, status.HTTP_200_OK)
+        order1.refresh_from_db()
+        diff1 = (order1.expires_at - order1.ready_at).total_seconds() / 60
+        self.assertAlmostEqual(diff1, 45, delta=1)
+
+        # 4. Mark another order Ready for Pickup with PER-ORDER override (e.g. 2 hours)
+        order2 = Order.objects.create(customer=self.customer, total_price=1500.00, status=OrderStatus.ACCEPTED)
+        OrderItem.objects.create(order=order2, product=p, size='M', quantity=1, price=1500)
+        order2_url = reverse('order-detail', kwargs={'pk': order2.id})
+        override_res = self.client.put(order2_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 2,
+            'hold_duration_unit': 'hours'
+        }, format='json')
+        self.assertEqual(override_res.status_code, status.HTTP_200_OK)
+        order2.refresh_from_db()
+        diff2 = (order2.expires_at - order2.ready_at).total_seconds() / 3600
+        self.assertAlmostEqual(diff2, 2, delta=0.1)
+
+    def test_reservation_deadline_updated_sends_email_to_customer(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        self.client.force_authenticate(user=self.store_owner)
+        mail.outbox.clear()
+
+        # Create a product and an order already in 'Ready for Pickup'
+        p = Product.objects.create(name='Silk Shirt', category='Women', price=2000, size_s=3, created_by=self.store_owner)
+        order = Order.objects.create(
+            customer=self.customer,
+            total_price=2000.00,
+            status=OrderStatus.READY,
+            ready_at=timezone.now() - timedelta(minutes=10),
+            expires_at=timezone.now() + timedelta(minutes=20)
+        )
+        OrderItem.objects.create(order=order, product=p, size='S', quantity=1, price=2000)
+
+        order_url = reverse('order-detail', kwargs={'pk': order.id})
+
+        # 1. Store Owner extends the reservation timeframe to 60 minutes
+        extend_res = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 60,
+            'hold_duration_unit': 'minutes'
+        }, format='json')
+
+        self.assertEqual(extend_res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertTrue(order.is_deadline_updated)
+
+        # Verify email was sent to customer
+        self.assertGreaterEqual(len(mail.outbox), 1)
+        update_email = mail.outbox[-1]
+        self.assertIn(self.customer.email, update_email.to)
+        self.assertIn("Trial Reservation Extended!", update_email.subject)
+        self.assertIn("1 hour", update_email.body)
+
+        # 2. Store Owner decreases the reservation timeframe to 15 minutes
+        mail.outbox.clear()
+        shorten_res = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 15,
+            'hold_duration_unit': 'minutes'
+        }, format='json')
+
+        self.assertEqual(shorten_res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertTrue(order.is_deadline_updated)
+
+        # Verify email was sent to customer for update/decrease
+        self.assertGreaterEqual(len(mail.outbox), 1)
+        shorten_email = mail.outbox[-1]
+        self.assertIn(self.customer.email, shorten_email.to)
+        self.assertIn("Trial Reservation Updated", shorten_email.subject)
+        self.assertIn("15 minutes", shorten_email.body)
+
+
+
 

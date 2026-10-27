@@ -62,15 +62,9 @@ export default function Home({
   const nextSlide = hasMultipleItems ? (currentSlide + 1) % editItems.length : null;
   const nextItem = nextSlide !== null ? editItems[nextSlide] : null;
 
-  // Handle category tile navigation with auth protection
+  // Handle category tile navigation with auth protection and post-login redirection
   const handleCategoryClick = (cat) => {
-    if (!user) {
-      setLoginModal("customer");
-    } else {
-      setCategory(cat);
-      setPage("products");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    go(cat);
   };
 
   const isStoreOwner = user?.role === "store_owner";

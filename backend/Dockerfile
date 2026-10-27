@@ -32,4 +32,4 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 8000 10000
 
 # Run migrations and auto-seed on first boot, then boot Gunicorn
-CMD sh -c "python manage.py migrate && python manage.py seed_cloud_db && gunicorn serv.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120"
+CMD sh -c "python manage.py migrate && gunicorn serv.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120"

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load environment variables from .env file
-load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env', override=True)
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -159,7 +159,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.environ.get('TIME_ZONE', 'Asia/Kolkata')
 USE_I18N = True
 USE_TZ = True
 
@@ -175,4 +175,24 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Email Configuration
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '').strip()
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '').replace(' ', '').strip()
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST_USER else 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('true', '1')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or (f"TryWise <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else 'TryWise <no-reply@trywise.com>')
+
+# In-Store Trial Configuration (Hold duration before auto-expiration)
+TRIAL_RESERVATION_HOURS = float(os.environ.get('TRIAL_RESERVATION_HOURS', 24))
+trial_minutes_env = os.environ.get('TRIAL_RESERVATION_MINUTES')
+TRIAL_RESERVATION_MINUTES = float(trial_minutes_env) if trial_minutes_env else None
+
+
 

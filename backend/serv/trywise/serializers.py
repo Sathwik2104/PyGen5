@@ -1,7 +1,8 @@
+import socket
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from .models import Product, Order, OrderItem
+from .models import Product, Order, OrderItem, UserRole, StoreConfiguration, TrialDurationUnit
 
 User = get_user_model()
 
@@ -26,6 +27,26 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"password": "Passwords do not match."})
+
+        # Single Store Owner Restriction
+        role = attrs.get('role', UserRole.CUSTOMER)
+        if role == UserRole.STORE_OWNER:
+            if User.objects.filter(role=UserRole.STORE_OWNER).exists():
+                raise serializers.ValidationError({
+                    "role": "Store owner registration is closed. Only a single authorized store owner account is permitted."
+                })
+
+        # Email Domain DNS Check
+        email = attrs.get('email', '').strip()
+        if '@' in email:
+            domain = email.split('@')[-1].strip()
+            try:
+                socket.getaddrinfo(domain, None)
+            except (socket.gaierror, IndexError):
+                raise serializers.ValidationError({
+                    "email": f"The email domain '@{domain}' does not exist or cannot receive mail."
+                })
+
         return attrs
 
     def create(self, validated_data):
@@ -75,11 +96,13 @@ class ProductSerializer(serializers.ModelSerializer):
     """
     ProductSerializer:
     Handles reading and creating products.
-    Includes inventory counts per size (size_s, size_m, size_l, size_xl)
-    and computed total_stock.
+    Includes inventory counts per size (size_s, size_m, size_l, size_xl),
+    computed total_stock, and promotional sale pricing.
     """
     created_by_name = serializers.ReadOnlyField(source='created_by.username')
     total_stock = serializers.ReadOnlyField()
+    is_on_sale = serializers.SerializerMethodField()
+    discount_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -88,6 +111,9 @@ class ProductSerializer(serializers.ModelSerializer):
             'name',
             'category',
             'price',
+            'original_price',
+            'is_on_sale',
+            'discount_percent',
             'image',
             'size_s',
             'size_m',
@@ -101,10 +127,28 @@ class ProductSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'created_by', 'created_by_name', 'created_at', 'updated_at')
 
+    def get_is_on_sale(self, obj):
+        return bool(obj.original_price and obj.original_price > obj.price)
+
+    def get_discount_percent(self, obj):
+        if obj.original_price and obj.original_price > obj.price:
+            diff = obj.original_price - obj.price
+            return int(round((diff / obj.original_price) * 100))
+        return 0
+
     def validate_price(self, value):
         if value <= 0:
             raise serializers.ValidationError("Price must be greater than zero.")
         return value
+
+    def validate(self, attrs):
+        price = attrs.get('price', getattr(self.instance, 'price', None))
+        orig_price = attrs.get('original_price', getattr(self.instance, 'original_price', None))
+        if orig_price is not None and price is not None and orig_price < price:
+            raise serializers.ValidationError({
+                "original_price": "Original/MRP price must be greater than or equal to current price."
+            })
+        return attrs
 
 
 # ==============================================================================
@@ -127,6 +171,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
             'size',
             'quantity',
             'price',
+            'status',
+            'is_restocked',
         )
 
     def get_product_name(self, obj):
@@ -155,7 +201,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     """
     OrderSerializer:
-    Reads order details, customer contact info, and nested item line-items.
+    Reads order details, customer contact info, final bill amount, and nested item line-items.
     """
     items = OrderItemSerializer(many=True, read_only=True)
     customer_username = serializers.ReadOnlyField(source='customer.username')
@@ -173,12 +219,16 @@ class OrderSerializer(serializers.ModelSerializer):
             'customer_email',
             'customer_phone',
             'total_price',
+            'final_price',
             'status',
+            'ready_at',
+            'expires_at',
+            'is_deadline_updated',
             'items',
             'created_at',
             'updated_at',
         )
-        read_only_fields = ('id', 'customer', 'total_price', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'customer', 'total_price', 'final_price', 'ready_at', 'expires_at', 'is_deadline_updated', 'created_at', 'updated_at')
 
     def get_customer_name(self, obj):
         full = f"{obj.customer.first_name} {obj.customer.last_name}".strip()
@@ -203,4 +253,66 @@ class CreateOrderSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("Your bag cannot be empty.")
         return value
+
+
+class ItemActionInputSerializer(serializers.Serializer):
+    item_id = serializers.IntegerField()
+    action = serializers.ChoiceField(choices=['purchased', 'restocked'])
+
+
+class UpdateOrderInputSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=Order._meta.get_field('status').choices, required=False)
+    item_actions = ItemActionInputSerializer(many=True, required=False)
+
+
+# ==============================================================================
+# AUTH & OTP SERIALIZERS
+# ==============================================================================
+
+class VerifyOTPSerializer(serializers.Serializer):
+    temp_token = serializers.CharField(required=True)
+    otp = serializers.CharField(required=True, min_length=6, max_length=6)
+
+
+class ResendOTPSerializer(serializers.Serializer):
+    temp_token = serializers.CharField(required=True)
+
+
+class ForgotPasswordRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    otp = serializers.CharField(required=True, min_length=6, max_length=6)
+    new_password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    confirm_password = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        return attrs
+
+
+class StoreConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreConfiguration
+        fields = ('trial_duration_value', 'trial_duration_unit', 'updated_at')
+        read_only_fields = ('updated_at',)
+
+    def validate_trial_duration_value(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Duration value must be at least 1.")
+        return value
+
+    def validate(self, attrs):
+        unit = attrs.get('trial_duration_unit')
+        val = attrs.get('trial_duration_value')
+        if unit == TrialDurationUnit.MINUTES and val and val > 1440:
+            raise serializers.ValidationError({"trial_duration_value": "Minutes cannot exceed 1440 (24 hours). Use hours instead."})
+        if unit == TrialDurationUnit.HOURS and val and val > 168:
+            raise serializers.ValidationError({"trial_duration_value": "Hours cannot exceed 168 (7 days)."})
+        return attrs
+
+
 
