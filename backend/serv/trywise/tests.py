@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.core import mail
 from trywise.models import Product, Order, OrderItem, OrderItemStatus, OrderStatus, EmailOTP, OTPPurpose, UserRole
+from trywise.views import read_registration_token
 
 User = get_user_model()
 
@@ -33,13 +34,14 @@ class AuthAndOTPAPITests(TestCase):
         self.assertTrue(res.data.get('verification_required'))
         temp_token = res.data['temp_token']
 
-        # User is created but inactive
-        user = User.objects.get(email='alice@example.com')
-        self.assertFalse(user.is_active)
+        # User is NOT created in DB prior to verification (Second approach)
+        self.assertFalse(User.objects.filter(email='alice@example.com').exists())
 
-        # OTP was created and emailed
-        otp_record = EmailOTP.objects.get(user=user, purpose=OTPPurpose.EMAIL_VERIFICATION, is_used=False)
-        self.assertEqual(len(otp_record.code), 6)
+        # Retrieve OTP from signed registration payload or in-memory store
+        reg_data = read_registration_token(temp_token)
+        self.assertIsNotNone(reg_data)
+        otp_code = reg_data['otp']
+        self.assertEqual(len(otp_code), 6)
         self.assertTrue(len(mail.outbox) > 0)
 
         # 2. Verify with wrong OTP
@@ -48,15 +50,18 @@ class AuthAndOTPAPITests(TestCase):
             'otp': '000000'
         }, format='json')
         self.assertEqual(wrong_res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(User.objects.filter(email='alice@example.com').exists())
 
         # 3. Verify with correct OTP
         valid_res = self.client.post(self.verify_reg_otp_url, {
             'temp_token': temp_token,
-            'otp': otp_record.code
+            'otp': otp_code
         }, format='json')
         self.assertEqual(valid_res.status_code, status.HTTP_200_OK)
         self.assertIn('tokens', valid_res.data)
-        user.refresh_from_db()
+
+        # Now the active user is created in database
+        user = User.objects.get(email='alice@example.com')
         self.assertTrue(user.is_active)
 
     def test_store_owner_login_requires_2fa_otp(self):

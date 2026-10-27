@@ -219,7 +219,10 @@ export default function LoginModal({ type, close, setLoginModal }) {
     setError(null);
     try {
       if (currentView === "otp_register") {
-        await resendRegistrationOtp(tempToken);
+        const res = await resendRegistrationOtp(tempToken);
+        if (res?.temp_token) {
+          setTempToken(res.temp_token);
+        }
         setSuccessMsg("A new registration verification code has been emailed.");
       } else if (currentView === "otp_login") {
         await resendLoginOtp(tempToken);
