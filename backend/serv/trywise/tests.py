@@ -412,4 +412,108 @@ class ProductOrderAndRevenueAPITests(TestCase):
         self.assertEqual(res_custom.data['items_sold_count'], 1)
         self.assertEqual(res_custom.data['items_restocked_count'], 1)
 
+    def test_store_configuration_api_and_dynamic_trial_hold(self):
+        config_url = reverse('store-config')
+        self.client.force_authenticate(user=self.store_owner)
+
+        # 1. Get default store config
+        res = self.client.get(config_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('trial_duration_value', res.data)
+        self.assertIn('trial_duration_unit', res.data)
+
+        # 2. Update config to 45 minutes
+        put_res = self.client.put(config_url, {
+            'trial_duration_value': 45,
+            'trial_duration_unit': 'minutes'
+        }, format='json')
+        self.assertEqual(put_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(put_res.data['trial_duration_value'], 45)
+        self.assertEqual(put_res.data['trial_duration_unit'], 'minutes')
+
+        # 3. Mark an order Ready for Pickup - should use store config (45 minutes)
+        p = Product.objects.create(name='Pants', category='Men', price=1500, size_m=2, created_by=self.store_owner)
+        order1 = Order.objects.create(customer=self.customer, total_price=1500.00, status=OrderStatus.ACCEPTED)
+        OrderItem.objects.create(order=order1, product=p, size='M', quantity=1, price=1500)
+
+        order_url = reverse('order-detail', kwargs={'pk': order1.id})
+        update_res = self.client.put(order_url, {'status': 'Ready for Pickup'}, format='json')
+        self.assertEqual(update_res.status_code, status.HTTP_200_OK)
+        order1.refresh_from_db()
+        diff1 = (order1.expires_at - order1.ready_at).total_seconds() / 60
+        self.assertAlmostEqual(diff1, 45, delta=1)
+
+        # 4. Mark another order Ready for Pickup with PER-ORDER override (e.g. 2 hours)
+        order2 = Order.objects.create(customer=self.customer, total_price=1500.00, status=OrderStatus.ACCEPTED)
+        OrderItem.objects.create(order=order2, product=p, size='M', quantity=1, price=1500)
+        order2_url = reverse('order-detail', kwargs={'pk': order2.id})
+        override_res = self.client.put(order2_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 2,
+            'hold_duration_unit': 'hours'
+        }, format='json')
+        self.assertEqual(override_res.status_code, status.HTTP_200_OK)
+        order2.refresh_from_db()
+        diff2 = (order2.expires_at - order2.ready_at).total_seconds() / 3600
+        self.assertAlmostEqual(diff2, 2, delta=0.1)
+
+    def test_reservation_deadline_updated_sends_email_to_customer(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        self.client.force_authenticate(user=self.store_owner)
+        mail.outbox.clear()
+
+        # Create a product and an order already in 'Ready for Pickup'
+        p = Product.objects.create(name='Silk Shirt', category='Women', price=2000, size_s=3, created_by=self.store_owner)
+        order = Order.objects.create(
+            customer=self.customer,
+            total_price=2000.00,
+            status=OrderStatus.READY,
+            ready_at=timezone.now() - timedelta(minutes=10),
+            expires_at=timezone.now() + timedelta(minutes=20)
+        )
+        OrderItem.objects.create(order=order, product=p, size='S', quantity=1, price=2000)
+
+        order_url = reverse('order-detail', kwargs={'pk': order.id})
+
+        # 1. Store Owner extends the reservation timeframe to 60 minutes
+        extend_res = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 60,
+            'hold_duration_unit': 'minutes'
+        }, format='json')
+
+        self.assertEqual(extend_res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertTrue(order.is_deadline_updated)
+
+        # Verify email was sent to customer
+        self.assertGreaterEqual(len(mail.outbox), 1)
+        update_email = mail.outbox[-1]
+        self.assertIn(self.customer.email, update_email.to)
+        self.assertIn("Trial Reservation Extended!", update_email.subject)
+        self.assertIn("1 hour", update_email.body)
+
+        # 2. Store Owner decreases the reservation timeframe to 15 minutes
+        mail.outbox.clear()
+        shorten_res = self.client.put(order_url, {
+            'status': 'Ready for Pickup',
+            'hold_duration_value': 15,
+            'hold_duration_unit': 'minutes'
+        }, format='json')
+
+        self.assertEqual(shorten_res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertTrue(order.is_deadline_updated)
+
+        # Verify email was sent to customer for update/decrease
+        self.assertGreaterEqual(len(mail.outbox), 1)
+        shorten_email = mail.outbox[-1]
+        self.assertIn(self.customer.email, shorten_email.to)
+        self.assertIn("Trial Reservation Updated", shorten_email.subject)
+        self.assertIn("15 minutes", shorten_email.body)
+
+
+
 

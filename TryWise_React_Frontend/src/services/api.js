@@ -438,3 +438,57 @@ export async function fetchStoreRevenue(period = "all", token, year = null, mont
   }
   return resData;
 }
+
+/**
+ * ==============================================================================
+ * STORE OWNER TRIAL POLICY & CONFIGURATION API
+ * ==============================================================================
+ */
+
+/**
+ * Fetch dynamic trial reservation policy for the Store Owner
+ * @param {string} token
+ */
+export async function fetchStoreConfig(token) {
+  const response = await fetch(`${API_BASE_URL}/store/config/`, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const resData = await response.json();
+  if (!response.ok) {
+    throw new Error(resData.detail || "Failed to fetch store configuration.");
+  }
+  return resData;
+}
+
+/**
+ * Update dynamic trial reservation policy for the Store Owner
+ * @param {Object} data - { trial_duration_value: number, trial_duration_unit: 'minutes' | 'hours' }
+ * @param {string} token
+ */
+export async function updateStoreConfig(data, token) {
+  const response = await fetch(`${API_BASE_URL}/store/config/`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  const resData = await response.json();
+  if (!response.ok) {
+    const errorMsg =
+      resData.detail ||
+      Object.entries(resData)
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+        .join(" | ") ||
+      "Failed to update store configuration.";
+    throw new Error(errorMsg);
+  }
+  return resData;
+}

@@ -15,6 +15,7 @@ from .views import (
     OrderListCreateView,
     OrderDetailView,
     StoreRevenueView,
+    StoreConfigurationView,
 )
 
 urlpatterns = [
@@ -40,6 +41,9 @@ urlpatterns = [
 
     # Store Owner Revenue & Analytics
     path('store/revenue/', StoreRevenueView.as_view(), name='store-revenue'),
+
+    # Store Owner Dynamic Trial Policy
+    path('store/config/', StoreConfigurationView.as_view(), name='store-config'),
 ]
 
 

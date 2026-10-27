@@ -513,3 +513,114 @@ def send_order_expired_email_to_customer(order):
     """
     return _send_html_email(subject, text_content, html_content, [customer.email])
 
+
+def send_order_deadline_updated_email_to_customer(order, old_expires_at=None, is_extended=True):
+    """
+    Notifies customer when their trial reservation timeframe / deadline has been updated
+    (increased or decreased) by the store owner.
+    """
+    customer = order.customer
+    if not customer.email:
+        return False
+
+    customer_name = f"{customer.first_name} {customer.last_name}".strip() or customer.username
+    duration_label, expires_str = format_order_expiration(order)
+
+    # Format previous deadline if available
+    old_expires_str = ""
+    if old_expires_at:
+        local_old = timezone.localtime(old_expires_at)
+        old_expires_str = local_old.strftime("%B %d, %Y by %I:%M %p")
+
+    if is_extended:
+        subject = f"⏱️ Trial Reservation Extended! - TryWise Request #{order.id}"
+        badge_title = "RESERVATION EXTENDED"
+        badge_bg = "#ecfdf5"
+        badge_color = "#047857"
+        border_color = "#10b981"
+        headline = "Great news! Your trial reservation has been extended."
+        detail_msg = f"The store owner has increased your trial reservation timeframe to <strong>{duration_label}</strong>. You now have more time to visit and try on your reserved pieces!"
+    else:
+        subject = f"⏱️ Trial Reservation Updated - TryWise Request #{order.id}"
+        badge_title = "RESERVATION UPDATED"
+        badge_bg = "#eff6ff"
+        badge_color = "#1d4ed8"
+        border_color = "#3b82f6"
+        headline = "Your trial reservation deadline has been updated."
+        detail_msg = f"The store owner has updated your trial reservation timeframe to <strong>{duration_label}</strong>. Please review your updated deadline below to ensure your pieces remain held for you."
+
+    # Build items rows
+    items_html_rows = ""
+    items_text_list = ""
+    for item in order.items.all():
+        name = item.product.name if item.product else (item.product_name or "Product")
+        items_text_list += f"• {name} | Size: {item.size} | Qty: {item.quantity}\n"
+        items_html_rows += f"""
+        <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #1e293b;">{name}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #475569; text-align: center;">{item.size}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #475569; text-align: center;">{item.quantity}</td>
+        </tr>
+        """
+
+    prev_deadline_text = f"• Previous Deadline: {old_expires_str}\n" if old_expires_str else ""
+    prev_deadline_html = f'<p style="margin: 4px 0; color: #64748b; font-size: 13px;"><strong>Previous Deadline:</strong> <span style="text-decoration: line-through;">{old_expires_str}</span></p>' if old_expires_str else ""
+
+    text_content = (
+        f"Hello {customer_name},\n\n"
+        f"{headline}\n\n"
+        f"Order ID: #{order.id}\n"
+        f"{detail_msg.replace('<strong>', '').replace('</strong>', '')}\n\n"
+        f"⏰ UPDATED TRIAL TIMING:\n"
+        f"• New Hold Window: Reserved for {duration_label} (Valid until {expires_str})\n"
+        f"{prev_deadline_text}"
+        f"• Store Hours: 10:00 AM – 9:00 PM\n\n"
+        f"Reserved Items on Fitting Rack:\n{items_text_list}\n"
+        f"Visit the fitting desk, mention Request #{order.id}, try on your pieces, and buy only what fits best!\n\n"
+        f"Best regards,\n"
+        f"The TryWise Team"
+    )
+
+    html_content = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid {border_color}; padding-bottom: 16px; margin-bottom: 20px;">
+            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Try<span style="color: {border_color};">Wise</span></h1>
+            <span style="background: {badge_bg}; color: {badge_color}; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px;">{badge_title}</span>
+        </div>
+        <h2 style="font-size: 18px; color: #1e293b; margin-top: 0;">⏱️ {headline}</h2>
+        <p style="color: #475569; font-size: 15px; line-height: 1.6;">
+            Hello <strong>{customer_name}</strong>,<br>
+            {detail_msg}
+        </p>
+        <div style="background-color: #f8fafc; border: 1.5px solid #e2e8f0; border-left: 4px solid {border_color}; border-radius: 8px; padding: 16px 18px; margin: 20px 0;">
+            <h3 style="margin: 0 0 8px; font-size: 15px; color: #0f172a;">⏰ Updated Reservation Timing</h3>
+            <p style="margin: 4px 0; color: #0f172a; font-size: 14px;"><strong>New Deadline:</strong> <span style="color: {border_color}; font-weight: 700;">{expires_str}</span> (Held for {duration_label})</p>
+            {prev_deadline_html}
+            <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Store Hours:</strong> Open daily 10:00 AM – 9:00 PM</p>
+            <p style="margin: 6px 0 0; color: #64748b; font-size: 13px;">📍 Mention Order <strong>#{order.id}</strong> at the store fitting desk to try on your pieces.</p>
+        </div>
+        <h3 style="font-size: 15px; color: #475569; margin: 16px 0 8px;">Reserved Items on Trial Rack:</h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 8px 0 20px;">
+            <thead>
+                <tr style="background-color: #f8fafc;">
+                    <th style="padding: 8px 10px; text-align: left; font-size: 12px; color: #475569;">PRODUCT</th>
+                    <th style="padding: 8px 10px; text-align: center; font-size: 12px; color: #475569;">SIZE</th>
+                    <th style="padding: 8px 10px; text-align: center; font-size: 12px; color: #475569;">QTY</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_html_rows}
+            </tbody>
+        </table>
+        <p style="color: #64748b; font-size: 12px; line-height: 1.5;">
+            ⚠️ If you are unable to visit before your new deadline, the items will be automatically restocked to inventory.
+        </p>
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;">
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
+            TryWise Smart In-Store Shopping
+        </p>
+    </div>
+    """
+    return _send_html_email(subject, text_content, html_content, [customer.email])
+
+

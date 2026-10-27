@@ -2,7 +2,7 @@ import socket
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from .models import Product, Order, OrderItem, UserRole
+from .models import Product, Order, OrderItem, UserRole, StoreConfiguration, TrialDurationUnit
 
 User = get_user_model()
 
@@ -223,11 +223,12 @@ class OrderSerializer(serializers.ModelSerializer):
             'status',
             'ready_at',
             'expires_at',
+            'is_deadline_updated',
             'items',
             'created_at',
             'updated_at',
         )
-        read_only_fields = ('id', 'customer', 'total_price', 'final_price', 'ready_at', 'expires_at', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'customer', 'total_price', 'final_price', 'ready_at', 'expires_at', 'is_deadline_updated', 'created_at', 'updated_at')
 
     def get_customer_name(self, obj):
         full = f"{obj.customer.first_name} {obj.customer.last_name}".strip()
@@ -291,5 +292,27 @@ class ResetPasswordSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
         return attrs
+
+
+class StoreConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreConfiguration
+        fields = ('trial_duration_value', 'trial_duration_unit', 'updated_at')
+        read_only_fields = ('updated_at',)
+
+    def validate_trial_duration_value(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Duration value must be at least 1.")
+        return value
+
+    def validate(self, attrs):
+        unit = attrs.get('trial_duration_unit')
+        val = attrs.get('trial_duration_value')
+        if unit == TrialDurationUnit.MINUTES and val and val > 1440:
+            raise serializers.ValidationError({"trial_duration_value": "Minutes cannot exceed 1440 (24 hours). Use hours instead."})
+        if unit == TrialDurationUnit.HOURS and val and val > 168:
+            raise serializers.ValidationError({"trial_duration_value": "Hours cannot exceed 168 (7 days)."})
+        return attrs
+
 
 

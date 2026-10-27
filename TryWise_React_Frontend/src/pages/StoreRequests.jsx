@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { fetchOrders, updateOrderStatusWithItems, fetchStoreRevenue } from "../services/api.js";
+import { useToast } from "../context/ToastContext.jsx";
+import { fetchOrders, updateOrderStatusWithItems, fetchStoreRevenue, fetchStoreConfig, updateStoreConfig } from "../services/api.js";
 import ImageModal from "../components/ImageModal.jsx";
 
 /**
@@ -16,11 +17,13 @@ import ImageModal from "../components/ImageModal.jsx";
  */
 export default function StoreRequests({ onOpenLogin }) {
   const { user, tokens } = useAuth();
+  const { showToast } = useToast();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [holdUpdateSuccess, setHoldUpdateSuccess] = useState({});
 
   // Per-order, per-item checkout decisions: { [orderId]: { [itemId]: 'purchased' | 'restocked' } }
   const [itemDecisions, setItemDecisions] = useState({});
@@ -31,6 +34,16 @@ export default function StoreRequests({ onOpenLogin }) {
   const [customYear, setCustomYear] = useState(new Date().getFullYear());
   const [customMonth, setCustomMonth] = useState(new Date().getMonth() + 1);
   const [revenueLoading, setRevenueLoading] = useState(false);
+
+  // Store dynamic trial policy state (Global default)
+  const [policyValue, setPolicyValue] = useState(24);
+  const [policyUnit, setPolicyUnit] = useState("hours");
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [policyMessage, setPolicyMessage] = useState(null);
+
+  // Per-order duration override state: { [orderId]: { value: number, unit: 'minutes' | 'hours' } }
+  const [orderHoldOverrides, setOrderHoldOverrides] = useState({});
 
   const loadOrders = async () => {
     try {
@@ -74,10 +87,88 @@ export default function StoreRequests({ onOpenLogin }) {
     }
   };
 
+  const loadStoreConfig = async () => {
+    if (!tokens?.access) return;
+    try {
+      setPolicyLoading(true);
+      const data = await fetchStoreConfig(tokens.access);
+      if (data?.trial_duration_value) {
+        setPolicyValue(data.trial_duration_value);
+      }
+      if (data?.trial_duration_unit) {
+        setPolicyUnit(data.trial_duration_unit);
+      }
+    } catch (err) {
+      console.error("Config fetch error:", err);
+    } finally {
+      setPolicyLoading(false);
+    }
+  };
+
+  const handleSavePolicy = async () => {
+    if (!tokens?.access) return;
+    try {
+      setPolicySaving(true);
+      setPolicyMessage(null);
+      await updateStoreConfig(
+        {
+          trial_duration_value: policyValue,
+          trial_duration_unit: policyUnit,
+        },
+        tokens.access
+      );
+      setPolicyMessage("✓ Saved!");
+      setTimeout(() => setPolicyMessage(null), 3000);
+    } catch (err) {
+      alert(err.message || "Failed to update store policy.");
+    } finally {
+      setPolicySaving(false);
+    }
+  };
+
+  const handleOrderHoldChange = (orderId, field, val) => {
+    setOrderHoldOverrides((prev) => {
+      const current = prev[orderId] || { value: policyValue, unit: policyUnit };
+      return {
+        ...prev,
+        [orderId]: {
+          ...current,
+          [field]: field === "value" ? Math.max(1, parseInt(val) || 1) : val,
+        },
+      };
+    });
+  };
+
+  const handleUpdateHoldDeadline = async (orderId) => {
+    const override = orderHoldOverrides[orderId] || { value: policyValue, unit: policyUnit };
+    try {
+      setUpdatingId(orderId);
+      const payload = {
+        status: "Ready for Pickup",
+        hold_duration_value: override.value,
+        hold_duration_unit: override.unit,
+      };
+      const updated = await updateOrderStatusWithItems(orderId, payload, tokens?.access);
+      setOrders((prev) =>
+        prev.map((ord) => (ord.id === orderId ? { ...ord, ...updated } : ord))
+      );
+      setHoldUpdateSuccess((prev) => ({ ...prev, [orderId]: true }));
+      setTimeout(() => {
+        setHoldUpdateSuccess((prev) => ({ ...prev, [orderId]: false }));
+      }, 4000);
+      showToast("Trial reservation updated! Customer notified via email.", "success");
+    } catch (err) {
+      showToast(err.message || "Failed to update reservation deadline.", "error");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   useEffect(() => {
     if (tokens?.access) {
       loadOrders();
       loadRevenue();
+      loadStoreConfig();
     }
   }, [tokens, revenuePeriod, customYear, customMonth]);
 
@@ -125,9 +216,13 @@ export default function StoreRequests({ onOpenLogin }) {
         };
       });
 
+      // Attach custom or default hold duration when moving to Ready for Pickup
+      const holdOverride = orderHoldOverrides[orderId] || { value: policyValue, unit: policyUnit };
       const payload = {
         status: newStatus,
         item_actions: newStatus === "Completed" ? item_actions : [],
+        hold_duration_value: newStatus === "Ready for Pickup" ? holdOverride.value : undefined,
+        hold_duration_unit: newStatus === "Ready for Pickup" ? holdOverride.unit : undefined,
       };
 
       const updated = await updateOrderStatusWithItems(orderId, payload, tokens?.access);
@@ -197,6 +292,7 @@ export default function StoreRequests({ onOpenLogin }) {
           onClick={() => {
             loadOrders();
             loadRevenue();
+            loadStoreConfig();
           }}
           className="secondary"
           style={{ padding: "10px 20px" }}
@@ -204,6 +300,53 @@ export default function StoreRequests({ onOpenLogin }) {
           ↻ Refresh All
         </button>
       </div>
+
+      {/* STORE TRIAL POLICY BANNER */}
+      <section className="store-policy-banner">
+        <div className="store-policy-info">
+          <div className="store-policy-badge">⏱️ Store Trial Policy</div>
+          <h3 className="store-policy-heading">Default Reservation Window</h3>
+          <p className="store-policy-desc">
+            Standard hold time when marking requests <strong>Ready for In-Store Try</strong>. (Can be overridden per-order below).
+          </p>
+        </div>
+
+        <div className="store-policy-action-wrap">
+          <div className="store-policy-input-group">
+            <input
+              type="number"
+              min="1"
+              max={policyUnit === "minutes" ? 1440 : 168}
+              value={policyValue}
+              onChange={(e) => setPolicyValue(Math.max(1, parseInt(e.target.value) || 1))}
+              className="store-policy-number-input"
+              disabled={policySaving || policyLoading}
+              title="Enter hold duration"
+            />
+            <select
+              value={policyUnit}
+              onChange={(e) => setPolicyUnit(e.target.value)}
+              className="store-policy-unit-select"
+              disabled={policySaving || policyLoading}
+            >
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+            </select>
+          </div>
+
+          <button
+            onClick={handleSavePolicy}
+            disabled={policySaving || policyLoading}
+            className="store-policy-save-btn"
+          >
+            {policySaving ? "Saving..." : "Save Default Policy"}
+          </button>
+
+          {policyMessage && (
+            <span className="store-policy-success-tag">{policyMessage}</span>
+          )}
+        </div>
+      </section>
 
       {/* REVENUE & ANALYTICS DASHBOARD */}
       <section className="revenue-dashboard-panel">
@@ -405,21 +548,67 @@ export default function StoreRequests({ onOpenLogin }) {
                   )}
                 </div>
 
-                {/* STATUS CONTROLLER */}
-                <div className="order-status-wrap">
-                  <span className="order-status-label">Status:</span>
-                  <select
-                    value={order.status}
-                    disabled={updatingId === order.id}
-                    onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                    className={`status-dropdown status-${order.status.replace(/\s+/g, "-")}`}
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Accepted">Accepted</option>
-                    <option value="Ready for Pickup">Ready for In-Store Try</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
+                {/* STATUS & HOLD DURATION CONTROLLER */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  {(order.status === "Pending" || order.status === "Accepted" || order.status === "Ready for Pickup") && (
+                    <div className="order-hold-pill" title="Customize trial reservation window for this customer">
+                      <span className="order-hold-label">⏱️ Hold:</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max={(orderHoldOverrides[order.id]?.unit || policyUnit) === "minutes" ? 1440 : 168}
+                        value={orderHoldOverrides[order.id]?.value ?? policyValue}
+                        onChange={(e) => handleOrderHoldChange(order.id, 'value', e.target.value)}
+                        className="order-hold-input"
+                        disabled={updatingId === order.id}
+                        title="Custom duration value"
+                      />
+                      <select
+                        value={orderHoldOverrides[order.id]?.unit ?? policyUnit}
+                        onChange={(e) => handleOrderHoldChange(order.id, 'unit', e.target.value)}
+                        className="order-hold-unit"
+                        disabled={updatingId === order.id}
+                        title="Duration unit"
+                      >
+                        <option value="minutes">m</option>
+                        <option value="hours">h</option>
+                      </select>
+                      {order.status === "Ready for Pickup" && (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateHoldDeadline(order.id)}
+                            disabled={updatingId === order.id}
+                            className="order-hold-update-btn"
+                            title="Apply custom duration and extend deadline for this customer"
+                          >
+                            {updatingId === order.id ? "..." : holdUpdateSuccess[order.id] ? "✓ Updated" : "Update"}
+                          </button>
+                          {holdUpdateSuccess[order.id] && (
+                            <span style={{ fontSize: "11px", color: "#15803d", fontWeight: "600", whiteSpace: "nowrap" }}>
+                              ✉️ Mail sent
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="order-status-wrap">
+                    <span className="order-status-label">Status:</span>
+                    <select
+                      value={order.status}
+                      disabled={updatingId === order.id}
+                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                      className={`status-dropdown status-${order.status.replace(/\s+/g, "-")}`}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Accepted">Accepted</option>
+                      <option value="Ready for Pickup">Ready for In-Store Try</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

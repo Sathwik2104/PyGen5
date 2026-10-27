@@ -18,6 +18,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .emails import (
     send_new_order_email_to_owners,
     send_order_accepted_email_to_customer,
+    send_order_deadline_updated_email_to_customer,
     send_order_expired_email_to_customer,
     send_order_ready_email_to_customer,
     send_password_reset_otp_email,
@@ -34,6 +35,8 @@ from .models import (
     OTPPurpose,
     Product,
     UserRole,
+    StoreConfiguration,
+    TrialDurationUnit,
 )
 from .serializers import (
     CreateOrderSerializer,
@@ -43,6 +46,7 @@ from .serializers import (
     ProductSerializer,
     RegisterSerializer,
     ResetPasswordSerializer,
+    StoreConfigurationSerializer,
     UpdateOrderInputSerializer,
     UserSerializer,
     VerifyOTPSerializer,
@@ -900,17 +904,51 @@ class OrderDetailView(APIView):
 
                 # If transitioning to Ready for Pickup: set configurable trial reservation window
                 update_fields = ['status', 'final_price', 'updated_at']
-                trial_minutes = getattr(settings, 'TRIAL_RESERVATION_MINUTES', None)
-                if trial_minutes:
-                    hold_delta = timedelta(minutes=float(trial_minutes))
-                else:
-                    hold_hours = getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)
-                    hold_delta = timedelta(hours=float(hold_hours))
 
-                if new_status == OrderStatus.READY and (old_status != OrderStatus.READY or not order.expires_at):
+                # Priority 1: Per-order override from store owner
+                custom_val = request.data.get('hold_duration_value')
+                custom_unit = request.data.get('hold_duration_unit')
+                hold_delta = None
+
+                if custom_val is not None and custom_unit in (TrialDurationUnit.MINUTES, TrialDurationUnit.HOURS):
+                    try:
+                        v = max(1, int(custom_val))
+                        hold_delta = timedelta(minutes=v) if custom_unit == TrialDurationUnit.MINUTES else timedelta(hours=v)
+                    except (ValueError, TypeError):
+                        hold_delta = None
+
+                # Priority 2: Store Owner's global StoreConfiguration
+                if not hold_delta:
+                    store_cfg = StoreConfiguration.objects.filter(owner=request.user).first() or StoreConfiguration.objects.first()
+                    if store_cfg:
+                        hold_delta = store_cfg.get_duration_delta()
+
+                # Priority 3: Fallback to settings / env variables
+                if not hold_delta:
+                    trial_minutes = getattr(settings, 'TRIAL_RESERVATION_MINUTES', None)
+                    if trial_minutes:
+                        hold_delta = timedelta(minutes=float(trial_minutes))
+                    else:
+                        hold_hours = getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)
+                        hold_delta = timedelta(hours=float(hold_hours))
+
+                old_expires_at = order.expires_at
+                deadline_updated = False
+                is_extended = True
+
+                if new_status == OrderStatus.READY and (old_status != OrderStatus.READY or not order.expires_at or custom_val is not None):
                     order.ready_at = timezone.now()
                     order.expires_at = timezone.now() + hold_delta
                     update_fields.extend(['ready_at', 'expires_at'])
+
+                    if old_status == OrderStatus.READY and old_expires_at:
+                        diff_sec = (order.expires_at - old_expires_at).total_seconds()
+                        if abs(diff_sec) > 5:
+                            deadline_updated = True
+                            is_extended = diff_sec > 0
+                            order.is_deadline_updated = True
+                            if 'is_deadline_updated' not in update_fields:
+                                update_fields.append('is_deadline_updated')
 
                 order.status = new_status
                 order.save(update_fields=update_fields)
@@ -928,12 +966,24 @@ class OrderDetailView(APIView):
                 except Exception as mail_err:
                     logger.error(f"Failed to send ready email to customer for #{order.id}: {mail_err}")
 
+            elif deadline_updated:
+                try:
+                    send_order_deadline_updated_email_to_customer(
+                        order,
+                        old_expires_at=old_expires_at,
+                        is_extended=is_extended
+                    )
+                except Exception as mail_err:
+                    logger.error(f"Failed to send deadline updated email to customer for #{order.id}: {mail_err}")
+
             out_serializer = OrderSerializer(order, context={'request': request})
             return Response(out_serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.exception("Error updating order")
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    put = patch
 
 
 # ==============================================================================
@@ -1016,3 +1066,38 @@ class StoreRevenueView(APIView):
             'items_sold_count': items_sold_count,
             'items_restocked_count': items_restocked_count,
         }, status=status.HTTP_200_OK)
+
+
+# ==============================================================================
+# STORE CONFIGURATION VIEW (DYNAMIC TRIAL HOLD POLICY)
+# ==============================================================================
+
+class StoreConfigurationView(APIView):
+    """
+    GET: Retrieve current dynamic trial reservation policy for the Store Owner.
+    PUT/PATCH: Update hold duration value and unit ('minutes' or 'hours').
+    """
+    permission_classes = [permissions.IsAuthenticated, IsStoreOwner]
+
+    def get(self, request):
+        config, _ = StoreConfiguration.objects.get_or_create(
+            owner=request.user,
+            defaults={
+                'trial_duration_value': int(getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) or getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)),
+                'trial_duration_unit': TrialDurationUnit.MINUTES if getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) else TrialDurationUnit.HOURS
+            }
+        )
+        serializer = StoreConfigurationSerializer(config)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        config, _ = StoreConfiguration.objects.get_or_create(
+            owner=request.user,
+            defaults={'trial_duration_value': 24, 'trial_duration_unit': TrialDurationUnit.HOURS}
+        )
+        serializer = StoreConfigurationSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+

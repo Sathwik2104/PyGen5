@@ -91,6 +91,7 @@ class Order(models.Model):
     )
     ready_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when order was marked Ready for Pickup")
     expires_at = models.DateTimeField(null=True, blank=True, help_text="Deadline for customer trial before auto-cancellation")
+    is_deadline_updated = models.BooleanField(default=False, help_text="Indicates whether trial hold duration/deadline was updated by store owner")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -172,5 +173,45 @@ class EmailOTP(models.Model):
 
     def __str__(self):
         return f"OTP for {self.user.email} ({self.purpose}) - Used: {self.is_used}"
+
+
+class TrialDurationUnit(models.TextChoices):
+    MINUTES = 'minutes', 'Minutes'
+    HOURS = 'hours', 'Hours'
+
+
+class StoreConfiguration(models.Model):
+    """
+    Store Configuration Model:
+    Allows Store Owner to dynamically configure store policies such as
+    trial hold reservation window in minutes or hours.
+    """
+    owner = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='store_config'
+    )
+    trial_duration_value = models.PositiveIntegerField(
+        default=24,
+        help_text="Hold duration value (e.g. 2, 24, 30)"
+    )
+    trial_duration_unit = models.CharField(
+        max_length=10,
+        choices=TrialDurationUnit.choices,
+        default=TrialDurationUnit.HOURS,
+        help_text="Unit for trial duration ('minutes' or 'hours')"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def get_duration_delta(self):
+        """Returns timedelta according to configured value and unit."""
+        from datetime import timedelta
+        if self.trial_duration_unit == TrialDurationUnit.MINUTES:
+            return timedelta(minutes=float(self.trial_duration_value))
+        return timedelta(hours=float(self.trial_duration_value))
+
+    def __str__(self):
+        return f"StoreConfig for {self.owner.username}: {self.trial_duration_value} {self.trial_duration_unit}"
+
 
 

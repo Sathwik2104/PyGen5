@@ -2703,3 +2703,198 @@ footer p {
     color: #ffffff;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
+
+/* =========================================================
+   STORE DYNAMIC TRIAL POLICY & OVERRIDE STYLES
+========================================================= */
+
+.store-policy-banner {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    box-shadow: 0 4px 16px rgba(23, 21, 26, 0.03);
+}
+
+.store-policy-info {
+    flex: 1;
+    min-width: 260px;
+}
+
+.store-policy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 6px;
+}
+
+.store-policy-heading {
+    margin: 0 0 4px 0;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.3px;
+}
+
+.store-policy-desc {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.store-policy-action-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.store-policy-input-group {
+    display: flex;
+    align-items: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 25px;
+    padding: 2px 4px 2px 10px;
+    transition: all 0.2s ease;
+}
+
+.store-policy-input-group:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+}
+
+.store-policy-number-input {
+    width: 60px;
+    border: none;
+    background: transparent;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--ink);
+    padding: 6px 4px;
+    text-align: center;
+    outline: none;
+}
+
+.store-policy-unit-select {
+    border: none;
+    background: transparent;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink);
+    padding: 6px 10px;
+    outline: none;
+    cursor: pointer;
+    border-left: 1px solid var(--line);
+}
+
+.store-policy-save-btn {
+    padding: 9px 18px;
+    border-radius: 25px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border: none;
+    background: var(--ink);
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.store-policy-save-btn:hover:not(:disabled) {
+    opacity: 0.92;
+    transform: translateY(-1px);
+}
+
+.store-policy-save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.store-policy-success-tag {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #15803d;
+    background: #dcfce7;
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+/* PER-ORDER OVERRIDE CONTROL */
+.order-hold-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--paper-tint);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 4px 8px 4px 10px;
+    font-size: 0.8rem;
+}
+
+.order-hold-label {
+    font-weight: 700;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.order-hold-input {
+    width: 44px;
+    padding: 3px 4px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--white);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink);
+    text-align: center;
+    outline: none;
+}
+
+.order-hold-input:focus {
+    border-color: var(--accent);
+}
+
+.order-hold-unit {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--white);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+    padding: 3px 4px;
+    outline: none;
+    cursor: pointer;
+}
+
+.order-hold-update-btn {
+    border: none;
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.order-hold-update-btn:hover:not(:disabled) {
+    background: #7c3aed;
+}

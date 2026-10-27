@@ -322,22 +322,22 @@ export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }
                           ord.status === "Ready for Pickup"
                             ? "#dcfce7"
                             : ord.status === "Accepted"
-                            ? "#ede9fe"
-                            : ord.status === "Completed"
-                            ? "#f1f5f9"
-                            : ord.status === "Cancelled"
-                            ? "#fee2e2"
-                            : "#fef3c7",
+                              ? "#ede9fe"
+                              : ord.status === "Completed"
+                                ? "#f1f5f9"
+                                : ord.status === "Cancelled"
+                                  ? "#fee2e2"
+                                  : "#fef3c7",
                         color:
                           ord.status === "Ready for Pickup"
                             ? "#15803d"
                             : ord.status === "Accepted"
-                            ? "#6d28d9"
-                            : ord.status === "Completed"
-                            ? "#334155"
-                            : ord.status === "Cancelled"
-                            ? "#b91c1c"
-                            : "#b45309",
+                              ? "#6d28d9"
+                              : ord.status === "Completed"
+                                ? "#334155"
+                                : ord.status === "Cancelled"
+                                  ? "#b91c1c"
+                                  : "#b45309",
                       }}
                     >
                       {ord.status === "Ready for Pickup" ? "✨ Ready to Try On!" : ord.status}
@@ -348,8 +348,8 @@ export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }
                   {isReady && ord.expires_at && (
                     <div
                       style={{
-                        background: "#ffffff",
-                        border: "1px dashed #22c55e",
+                        background: ord.is_deadline_updated ? "#f0fdf4" : "#ffffff",
+                        border: ord.is_deadline_updated ? "1.5px solid #22c55e" : "1px dashed #22c55e",
                         borderRadius: "10px",
                         padding: "12px 14px",
                         margin: "10px 0 14px",
@@ -358,9 +358,25 @@ export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }
                         lineHeight: "1.5",
                       }}
                     >
-                      <strong>🎉 Your pieces are waiting in the fitting room!</strong>
-                      <br />
-                      ⏰ <strong>Hold Deadline:</strong> Reserved until {new Date(ord.expires_at).toLocaleString()} (Store Hours: 10:00 AM – 9:00 PM).
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px", marginBottom: "4px" }}>
+                        <strong>🎉 Your pieces are waiting in the fitting room!</strong>
+                        {ord.is_deadline_updated && (
+                          <span
+                            style={{
+                              background: "#dcfce7",
+                              color: "#15803d",
+                              fontSize: "11px",
+                              fontWeight: "700",
+                              padding: "2px 8px",
+                              borderRadius: "12px",
+                              border: "1px solid #bbf7d0",
+                            }}
+                          >
+                            ⏱️ Reservation Updated
+                          </span>
+                        )}
+                      </div>
+                      ⏰ <strong>Hold Deadline:</strong> Reserved for {getTrialTimeframeLabel(ord)} (Valid until {new Date(ord.expires_at).toLocaleString()}) (Store Hours: 10:00 AM – 9:00 PM).
                       <br />
                       Visit the fitting room, mention Order #{ord.id}, try on, and pay only for what you take!
                     </div>
@@ -379,7 +395,7 @@ export default function Cart({ cart, setCart, setPage, goProducts, onOpenLogin }
                         color: "#9f1239",
                       }}
                     >
-                      ⚠️ <strong>Trial Window Expired:</strong> The {getTrialTimeframeLabel(ord)} reservation ended (held until {new Date(ord.expires_at).toLocaleString()}), and the items have been returned to store inventory.
+                      ⚠️ <strong>Trial Window Expired:</strong> The {getTrialTimeframeLabel(ord)} reservation ended (held until {new Date(ord.expires_at).toLocaleString()}), and your request has been cancelled.
                     </div>
                   )}
 
