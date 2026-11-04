@@ -471,7 +471,7 @@ def send_order_ready_email_to_customer(order):
         return False
 
     customer_name = f"{customer.first_name} {customer.last_name}".strip() or customer.username
-    subject = f"✨ Your Items are Ready to Try On! - TryWise Request #{order.id}"
+    subject = f"Your Reserved Items are Ready to Try On! - TryWise Request #{order.id}"
 
     duration_label, expires_str = format_order_expiration(order)
 
@@ -480,7 +480,6 @@ def send_order_ready_email_to_customer(order):
     items_text_list = ""
     for item in order.items.all():
         name = item.product.name if item.product else (item.product_name or "Product")
-        line_val = float(item.price) * item.quantity
         items_text_list += f"• {name} | Size: {item.size} | Qty: {item.quantity}\n"
         items_html_rows += f"""
         <tr>
@@ -495,9 +494,9 @@ def send_order_ready_email_to_customer(order):
         f"Your Bag It items are READY to try on at the store!\n\n"
         f"Order ID: #{order.id}\n"
         f"Reserved Items:\n{items_text_list}\n"
-        f"⏰ RESERVATION TIMING & STORE HOURS:\n"
+        f"RESERVATION TIMING & STORE HOURS:\n"
         f"• Hold Period: Reserved for {duration_label} (Valid until {expires_str})\n"
-        f"• Store Hours: 10:00 AM – 9:00 PM\n\n"
+        f"• Store Hours: 10:00 AM - 9:00 PM\n\n"
         f"Please visit our store and mention Order #{order.id} at the fitting desk. "
         f"Try on your reserved sizes and pay only for what you love.\n\n"
         f"Note: If you are unable to visit within the reservation window, the items will be automatically restocked so other shoppers can purchase them.\n\n"
@@ -511,7 +510,7 @@ def send_order_ready_email_to_customer(order):
             <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Try<span style="color: #10b981;">Wise</span></h1>
             <span style="background: #ecfdf5; color: #047857; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px;">READY FOR TRIAL</span>
         </div>
-        <h2 style="font-size: 18px; color: #1e293b; margin-top: 0;">✨ Your Reserved Pieces are Ready!</h2>
+        <h2 style="font-size: 18px; color: #1e293b; margin-top: 0;">Your Reserved Pieces are Ready!</h2>
         <p style="color: #475569; font-size: 15px; line-height: 1.6;">
             Hello <strong>{customer_name}</strong>,<br>
             Your in-store trial rack has been prepared with your requested items and sizes:
@@ -529,13 +528,13 @@ def send_order_ready_email_to_customer(order):
             </tbody>
         </table>
         <div style="background-color: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 10px; padding: 16px 18px; margin: 20px 0;">
-            <h3 style="margin: 0 0 8px; font-size: 15px; color: #065f46;">⏰ Trial Timing & Store Hours</h3>
+            <h3 style="margin: 0 0 8px; font-size: 15px; color: #065f46;">Trial Timing & Store Hours</h3>
             <p style="margin: 4px 0; color: #047857; font-size: 14px;"><strong>Hold Window:</strong> Reserved for {duration_label} (Valid until {expires_str})</p>
-            <p style="margin: 4px 0; color: #047857; font-size: 14px;"><strong>Store Hours:</strong> Open daily 10:00 AM – 9:00 PM</p>
-            <p style="margin: 6px 0 0; color: #065f46; font-size: 13px;">📍 Visit the store fitting desk, show Order <strong>#{order.id}</strong>, try on your picks, and buy only what fits you best!</p>
+            <p style="margin: 4px 0; color: #047857; font-size: 14px;"><strong>Store Hours:</strong> Open daily 10:00 AM - 9:00 PM</p>
+            <p style="margin: 6px 0 0; color: #065f46; font-size: 13px;">Visit the store fitting desk, show Order <strong>#{order.id}</strong>, try on your picks, and buy only what fits you best!</p>
         </div>
         <p style="color: #64748b; font-size: 12px; line-height: 1.5;">
-            ⚠️ If you are unable to visit before your deadline, the items will be automatically restocked to store inventory.
+            Notice: If you are unable to visit before your deadline, the items will be automatically restocked to store inventory.
         </p>
         <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;">
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">

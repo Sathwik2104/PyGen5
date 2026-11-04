@@ -246,8 +246,8 @@ export default function LoginModal({ type, close, setLoginModal }) {
     setLoading(true);
     setError(null);
     try {
-      await forgotPassword(resetEmail.trim());
-      setSuccessMsg(`If ${resetEmail} is registered, a 6-digit reset code has been sent.`);
+      const res = await forgotPassword(resetEmail.trim());
+      setSuccessMsg(res.message || `A 6-digit password reset code has been sent to ${resetEmail}.`);
       setCurrentView("forgot_reset");
     } catch (err) {
       setError(err.message || "Failed to initiate password reset.");
@@ -446,10 +446,26 @@ export default function LoginModal({ type, close, setLoginModal }) {
               {loading ? "Sending..." : "Send Reset Code ↗"}
             </button>
 
-            <div className="modal-center-link-wrap">
+            <div className="modal-center-link-wrap" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
+              {error && error.toLowerCase().includes("register") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setCurrentView("register");
+                  }}
+                  className="modal-action-link"
+                  style={{ fontWeight: "700", color: "#6366f1" }}
+                >
+                  ✨ Don't have an account? Register here →
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setCurrentView("customer")}
+                onClick={() => {
+                  setError(null);
+                  setCurrentView("customer");
+                }}
                 className="modal-action-link"
               >
                 ← Back to Login
