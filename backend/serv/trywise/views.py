@@ -641,11 +641,18 @@ class ProductListCreateView(APIView):
     def post(self, request):
         serializer = ProductSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            product = serializer.save(created_by=request.user)
-            return Response(
-                ProductSerializer(product, context={'request': request}).data,
-                status=status.HTTP_201_CREATED
-            )
+            try:
+                product = serializer.save(created_by=request.user)
+                return Response(
+                    ProductSerializer(product, context={'request': request}).data,
+                    status=status.HTTP_201_CREATED
+                )
+            except Exception as e:
+                logger.exception("Failed to create product: %s", e)
+                return Response(
+                    {'detail': f'Failed to create product: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -693,26 +700,33 @@ class ProductDetailView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
-            updated_product = serializer.save()
-            new_price = updated_product.price
+        try:
+            with transaction.atomic():
+                updated_product = serializer.save()
+                new_price = updated_product.price
 
-            # If the price changed, automatically propagate to active Bag It requests
-            if new_price != old_price:
-                active_orders = Order.objects.filter(
-                    status__in=[OrderStatus.PENDING, OrderStatus.ACCEPTED, OrderStatus.READY],
-                    items__product=updated_product
-                ).distinct()
+                # If the price changed, automatically propagate to active Bag It requests
+                if new_price != old_price:
+                    active_orders = Order.objects.filter(
+                        status__in=[OrderStatus.PENDING, OrderStatus.ACCEPTED, OrderStatus.READY],
+                        items__product=updated_product
+                    ).distinct()
 
-                for order in active_orders:
-                    # Update line-item price for this product
-                    order.items.filter(product=updated_product).update(price=new_price)
-                    # Recalculate order total price
-                    new_order_total = sum(item.price * item.quantity for item in order.items.all())
-                    order.total_price = new_order_total
-                    order.save(update_fields=['total_price', 'updated_at'])
+                    for order in active_orders:
+                        # Update line-item price for this product
+                        order.items.filter(product=updated_product).update(price=new_price)
+                        # Recalculate order total price
+                        new_order_total = sum(item.price * item.quantity for item in order.items.all())
+                        order.total_price = new_order_total
+                        order.save(update_fields=['total_price', 'updated_at'])
 
-        return Response(ProductSerializer(updated_product, context={'request': request}).data, status=status.HTTP_200_OK)
+            return Response(ProductSerializer(updated_product, context={'request': request}).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception("Failed to update product #%s: %s", pk, e)
+            return Response(
+                {'detail': f'Failed to update product: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def delete(self, request, pk):
         product = self.get_object(pk)

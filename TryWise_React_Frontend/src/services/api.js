@@ -243,14 +243,22 @@ export async function createProduct(formData, token) {
     body: formData,
   });
 
-  const resData = await response.json();
+  let resData = null;
+  try {
+    resData = await response.json();
+  } catch {
+    resData = null;
+  }
+
   if (!response.ok) {
     const errorMsg =
-      resData.detail ||
-      Object.entries(resData)
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
-        .join(" | ") ||
-      "Failed to create product.";
+      resData?.detail ||
+      (resData && typeof resData === "object"
+        ? Object.entries(resData)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+            .join(" | ")
+        : null) ||
+      `Server error (${response.status}): Failed to create product.`;
     throw new Error(errorMsg);
   }
   return resData;
@@ -279,14 +287,22 @@ export async function updateProduct(productId, data, token) {
     body: isFormData ? data : JSON.stringify(data),
   });
 
-  const resData = await response.json();
+  let resData = null;
+  try {
+    resData = await response.json();
+  } catch {
+    resData = null;
+  }
+
   if (!response.ok) {
     const errorMsg =
-      resData.detail ||
-      Object.entries(resData)
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
-        .join(" | ") ||
-      "Failed to update product.";
+      resData?.detail ||
+      (resData && typeof resData === "object"
+        ? Object.entries(resData)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+            .join(" | ")
+        : null) ||
+      `Server error (${response.status}): Failed to update product.`;
     throw new Error(errorMsg);
   }
   return resData;
