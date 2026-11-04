@@ -534,12 +534,16 @@ class ForgotPasswordView(APIView):
         email = serializer.validated_data['email']
         user = User.objects.filter(email__iexact=email).first()
 
-        if user:
-            generate_and_send_otp(user, OTPPurpose.PASSWORD_RESET)
+        if not user:
+            return Response(
+                {'detail': 'This email address is not registered. Please register first.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # Generic response prevents account enumeration
+        generate_and_send_otp(user, OTPPurpose.PASSWORD_RESET)
+
         return Response({
-            'message': f"If an account with {email} exists, a 6-digit password reset code has been sent.",
+            'message': f"A 6-digit password reset code has been sent to {email}.",
             'email': email,
         }, status=status.HTTP_200_OK)
 
@@ -942,7 +946,7 @@ class OrderListCreateView(APIView):
 
 class OrderDetailView(APIView):
     """
-    PATCH: Store Owner updates the order status (e.g. Accepted, Ready for Pickup, Completed, Cancelled).
+    PATCH / PUT: Store Owner updates the order status (e.g. Accepted, Ready for Pickup, Completed, Cancelled).
     Supports partial-purchase checkout via 'item_actions':
       - Marks purchased vs restocked items.
       - Restocks unpurchased items atomically back into product inventory.
@@ -950,6 +954,9 @@ class OrderDetailView(APIView):
       - When an order is Cancelled, all unpurchased items are automatically restocked!
     """
     permission_classes = [permissions.IsAuthenticated, IsStoreOwner]
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
 
     def patch(self, request, pk):
         try:
@@ -1080,9 +1087,9 @@ class OrderDetailView(APIView):
                         order.ready_at = timezone.now()
                         order.expires_at = order.ready_at + hold_delta
                         update_fields.extend(['ready_at', 'expires_at'])
-                    elif custom_val is not None or not order.expires_at:
+                    else:
                         # Order was ALREADY in Ready for Pickup:
-                        # Preserve original ready_at! Calculate new expiration from the original reservation time.
+                        # Preserve original ready_at! Calculate new expiration anchored from original reservation time.
                         base_time = order.ready_at
                         # Edge case: if calculated deadline from original ready_at is already in the past, anchor to now
                         if (base_time + hold_delta) <= timezone.now():
@@ -1108,19 +1115,22 @@ class OrderDetailView(APIView):
                 order.save(update_fields=update_fields)
 
             # Customer notifications dispatched outside the transaction
+            # Case A: Status changed to Accepted
             if old_status != OrderStatus.ACCEPTED and new_status == OrderStatus.ACCEPTED:
                 try:
                     send_order_accepted_email_to_customer(order)
                 except Exception as mail_err:
                     logger.error(f"Failed to send accepted email to customer for #{order.id}: {mail_err}")
 
+            # Case B: Status changed to Ready for Try On (Exact clean logic like Accepted!) or explicit re-notify
             elif (old_status != OrderStatus.READY and new_status == OrderStatus.READY) or (new_status == OrderStatus.READY and notify_ready):
                 try:
                     send_order_ready_email_to_customer(order)
                 except Exception as mail_err:
                     logger.error(f"Failed to send ready email to customer for #{order.id}: {mail_err}")
 
-            elif deadline_updated:
+            # Case C: Order was ALREADY Ready, and the store owner updated / extended the hold duration
+            elif old_status == OrderStatus.READY and new_status == OrderStatus.READY and deadline_updated:
                 try:
                     send_order_deadline_updated_email_to_customer(
                         order,
