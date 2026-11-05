@@ -3,6 +3,41 @@
 from django.db import migrations, models
 
 
+def add_columns_safely(apps, schema_editor):
+    """
+    Safely inspects trywise_storeconfiguration table before adding columns.
+    Prevents MySQL / TiDB error 1060 ('Duplicate column name') if previous
+    deploy or manual change partially added columns before migration recorded.
+    """
+    connection = schema_editor.connection
+    with connection.cursor() as cursor:
+        # Check existing columns in the table
+        try:
+            cursor.execute("SHOW COLUMNS FROM trywise_storeconfiguration")
+            existing_cols = {row[0].lower() for row in cursor.fetchall()}
+        except Exception:
+            # Fallback if sqlite or other backend
+            existing_cols = set()
+
+        columns_to_add = [
+            ("store_name", "VARCHAR(255) DEFAULT 'TryWise Fashion Studio & Trial Store' NOT NULL"),
+            ("address", "LONGTEXT NULL"),
+            ("landmark", "VARCHAR(255) DEFAULT 'Near Indiranagar Metro Station (Metro Pillar 84)' NOT NULL"),
+            ("hours", "VARCHAR(255) DEFAULT 'Monday – Sunday: 10:00 AM – 9:00 PM (Daily)' NOT NULL"),
+            ("phone", "VARCHAR(50) DEFAULT '+91 98765 43210' NOT NULL"),
+            ("email", "VARCHAR(254) DEFAULT 'support@trywise.shop' NOT NULL"),
+        ]
+
+        for col_name, col_def in columns_to_add:
+            if col_name.lower() not in existing_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE trywise_storeconfiguration ADD COLUMN `{col_name}` {col_def}")
+                except Exception as e:
+                    # Ignore duplicate column error if already exists
+                    if '1060' not in str(e) and 'Duplicate column' not in str(e):
+                        raise
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,35 +45,41 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='storeconfiguration',
-            name='store_name',
-            field=models.CharField(blank=True, default='TryWise Fashion Studio & Trial Store', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='storeconfiguration',
-            name='address',
-            field=models.TextField(blank=True, default='100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038'),
-        ),
-        migrations.AddField(
-            model_name='storeconfiguration',
-            name='landmark',
-            field=models.CharField(blank=True, default='Near Indiranagar Metro Station (Metro Pillar 84)', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='storeconfiguration',
-            name='hours',
-            field=models.CharField(blank=True, default='Monday – Sunday: 10:00 AM – 9:00 PM (Daily)', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='storeconfiguration',
-            name='phone',
-            field=models.CharField(blank=True, default='+91 98765 43210', max_length=50),
-        ),
-        migrations.AddField(
-            model_name='storeconfiguration',
-            name='email',
-            field=models.EmailField(blank=True, default='support@trywise.shop', max_length=254),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='storeconfiguration',
+                    name='store_name',
+                    field=models.CharField(blank=True, default='TryWise Fashion Studio & Trial Store', max_length=255),
+                ),
+                migrations.AddField(
+                    model_name='storeconfiguration',
+                    name='address',
+                    field=models.TextField(blank=True, default='100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038'),
+                ),
+                migrations.AddField(
+                    model_name='storeconfiguration',
+                    name='landmark',
+                    field=models.CharField(blank=True, default='Near Indiranagar Metro Station (Metro Pillar 84)', max_length=255),
+                ),
+                migrations.AddField(
+                    model_name='storeconfiguration',
+                    name='hours',
+                    field=models.CharField(blank=True, default='Monday – Sunday: 10:00 AM – 9:00 PM (Daily)', max_length=255),
+                ),
+                migrations.AddField(
+                    model_name='storeconfiguration',
+                    name='phone',
+                    field=models.CharField(blank=True, default='+91 98765 43210', max_length=50),
+                ),
+                migrations.AddField(
+                    model_name='storeconfiguration',
+                    name='email',
+                    field=models.EmailField(blank=True, default='support@trywise.shop', max_length=254),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_columns_safely, reverse_code=migrations.RunPython.noop),
+            ],
         ),
     ]
-
