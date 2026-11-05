@@ -184,12 +184,40 @@ class StoreConfiguration(models.Model):
     """
     Store Configuration Model:
     Allows Store Owner to dynamically configure store policies such as
-    trial hold reservation window in minutes or hours.
+    trial hold reservation window in minutes or hours, plus store location details.
     """
     owner = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
         related_name='store_config'
+    )
+    store_name = models.CharField(
+        max_length=255,
+        default="TryWise Fashion Studio & Trial Store",
+        blank=True
+    )
+    address = models.TextField(
+        default="100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038",
+        blank=True
+    )
+    landmark = models.CharField(
+        max_length=255,
+        default="Near Indiranagar Metro Station (Metro Pillar 84)",
+        blank=True
+    )
+    hours = models.CharField(
+        max_length=255,
+        default="Monday – Sunday: 10:00 AM – 9:00 PM (Daily)",
+        blank=True
+    )
+    phone = models.CharField(
+        max_length=50,
+        default="+91 98765 43210",
+        blank=True
+    )
+    email = models.EmailField(
+        default="support@trywise.shop",
+        blank=True
     )
     trial_duration_value = models.PositiveIntegerField(
         default=24,

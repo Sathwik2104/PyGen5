@@ -630,10 +630,16 @@ class ProductListCreateView(APIView):
 
     def get(self, request):
         category = request.query_params.get('category', None)
+        search = request.query_params.get('search', '').strip()
         products = Product.objects.all()
 
         if category and category.lower() != 'all':
             products = products.filter(category__iexact=category)
+
+        if search:
+            products = products.filter(
+                Q(name__icontains=search) | Q(category__icontains=search)
+            )
 
         serializer = ProductSerializer(products, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1252,21 +1258,53 @@ class StoreRevenueView(APIView):
 
 class StoreConfigurationView(APIView):
     """
-    GET: Retrieve current dynamic trial reservation policy for the Store Owner.
-    PUT/PATCH: Update hold duration value and unit ('minutes' or 'hours').
+    GET: Retrieve current store configuration & location details (public for customers and store owners).
+    PUT/PATCH: Update store details, timings, and hold duration policy (Store Owner only).
     """
-    permission_classes = [permissions.IsAuthenticated, IsStoreOwner]
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return [permissions.IsAuthenticated(), IsStoreOwner()]
+        return [permissions.AllowAny()]
 
     def get(self, request):
-        config, _ = StoreConfiguration.objects.get_or_create(
-            owner=request.user,
-            defaults={
-                'trial_duration_value': int(getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) or getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)),
-                'trial_duration_unit': TrialDurationUnit.MINUTES if getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) else TrialDurationUnit.HOURS
-            }
-        )
-        serializer = StoreConfigurationSerializer(config)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        config = None
+        if request.user.is_authenticated and getattr(request.user, 'role', None) == UserRole.STORE_OWNER:
+            config, _ = StoreConfiguration.objects.get_or_create(
+                owner=request.user,
+                defaults={
+                    'trial_duration_value': int(getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) or getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)),
+                    'trial_duration_unit': TrialDurationUnit.MINUTES if getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) else TrialDurationUnit.HOURS
+                }
+            )
+        else:
+            config = StoreConfiguration.objects.first()
+
+        if not config:
+            store_owner = User.objects.filter(role=UserRole.STORE_OWNER).first()
+            if store_owner:
+                config, _ = StoreConfiguration.objects.get_or_create(
+                    owner=store_owner,
+                    defaults={
+                        'trial_duration_value': int(getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) or getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)),
+                        'trial_duration_unit': TrialDurationUnit.MINUTES if getattr(settings, 'TRIAL_RESERVATION_MINUTES', None) else TrialDurationUnit.HOURS
+                    }
+                )
+
+        if config:
+            serializer = StoreConfigurationSerializer(config)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # Fallback default store details if database is clean
+        return Response({
+            'store_name': 'TryWise Fashion Studio & Trial Store',
+            'address': '100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038',
+            'landmark': 'Near Indiranagar Metro Station (Metro Pillar 84)',
+            'hours': 'Monday – Sunday: 10:00 AM – 9:00 PM (Daily)',
+            'phone': '+91 98765 43210',
+            'email': 'support@trywise.shop',
+            'trial_duration_value': 24,
+            'trial_duration_unit': 'hours',
+        }, status=status.HTTP_200_OK)
 
     def put(self, request):
         config, _ = StoreConfiguration.objects.get_or_create(
