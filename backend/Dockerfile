@@ -7,16 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system dependencies required for PyMySQL, Cryptography, and Pillow
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    pkg-config \
-    default-libmysqlclient-dev \
-    libjpeg-dev \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
+# Install Python dependencies directly
+# (All dependencies in requirements.txt have prebuilt binary wheels on PyPI or are pure Python)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -25,11 +17,11 @@ COPY serv/ /app/serv/
 
 WORKDIR /app/serv
 
-# Collect static files for Django Admin (WhiteNoise)
-RUN python manage.py collectstatic --noinput
+# Collect static files for WhiteNoise using in-memory dummy DB to avoid build-time DB dependencies
+RUN DATABASE_URL=sqlite:///:memory: python manage.py collectstatic --noinput
 
 # Render sets PORT dynamically (defaults to 10000 or 8000)
 EXPOSE 8000 10000
 
-# Run migrations and auto-seed on first boot, then boot Gunicorn
+# Run migrations and boot Gunicorn (NO local seed data is loaded into production)
 CMD sh -c "python manage.py migrate && gunicorn serv.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120"
