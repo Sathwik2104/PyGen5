@@ -35,17 +35,20 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   // Stock updating loader indicator per product
   const [stockUpdating, setStockUpdating] = useState({});
 
+  // Search state: typed input & active debounced/submitted search query
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const activeCategory =
     typeof category === "string" && (category === "Women" || category === "Men")
       ? category
       : "All";
 
-  const loadProducts = async () => {
+  const loadProducts = async (cat = activeCategory, search = searchQuery) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchProducts(activeCategory);
+      const data = await fetchProducts(cat, search);
       setProducts(data);
 
       // Initialize default selected size for each product (pick first available in-stock size)
@@ -63,11 +66,32 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
     }
   };
 
+  // Live type-ahead: 250ms debounce as user types
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Load products whenever category, active search query, or user changes
   useEffect(() => {
     if (user) {
-      loadProducts();
+      loadProducts(activeCategory, searchQuery);
     }
-  }, [category, user]);
+  }, [category, searchQuery, user]);
+
+  // Manual search submit (Search button or Enter key - instant execution)
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault();
+    setSearchQuery(searchInput.trim());
+  };
+
+  // Clear search and reset list
+  const handleClearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+  };
 
   // Handle customer choosing a size
   const handleSelectSize = (product, size) => {
@@ -181,31 +205,95 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
         )}
       </div>
 
-      {/* FILTERS */}
-      <div className="filters">
-        {["All", "Women", "Men"].map((item) => (
-          <button
-            key={item}
-            className={activeCategory === item ? "sel" : ""}
-            onClick={() => setCategory(item)}
-          >
-            {item}
+      {/* SEARCH AND FILTERS TOOLBAR */}
+      <div className="products-toolbar">
+        {/* CATEGORY FILTERS */}
+        <div className="filters">
+          {["All", "Women", "Men"].map((item) => (
+            <button
+              key={item}
+              className={activeCategory === item ? "sel" : ""}
+              onClick={() => setCategory(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        {/* SEARCH FORM (LIVE TYPE-AHEAD + SEARCH BUTTON) */}
+        <form className="products-search-form" onSubmit={handleSearchSubmit}>
+          <div className="search-input-wrapper">
+            <span className="search-icon">🔍</span>
+            <input
+              type="text"
+              className="search-input"
+              placeholder={`Search in ${activeCategory === "All" ? "all products" : activeCategory + " collection"}...`}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              aria-label="Search products"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={handleClearSearch}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <button type="submit" className="search-submit-btn" title="Search products">
+            Search
           </button>
-        ))}
+        </form>
       </div>
+
+      {/* ACTIVE SEARCH STATUS BANNER */}
+      {searchQuery && (
+        <div className="search-status-banner">
+          <span>
+            Showing results for <strong>"{searchQuery}"</strong> in <strong>{activeCategory}</strong> ({products.length} {products.length === 1 ? "product" : "products"} found)
+          </span>
+          <button
+            type="button"
+            className="search-status-clear-btn"
+            onClick={handleClearSearch}
+            title="Clear search"
+          >
+            Clear Search ✕
+          </button>
+        </div>
+      )}
 
       {loading && <p style={{ color: "var(--muted)", margin: "20px 0" }}>Loading collection...</p>}
       {error && <div className="error-badge">{error}</div>}
 
       {!loading && products.length === 0 && (
         <div className="empty">
-          <div className="empty-icon">🛍</div>
-          <div className="empty-title">No products found in this category.</div>
+          <div className="empty-icon">{searchQuery ? "🔍" : "🛍"}</div>
+          <div className="empty-title">
+            {searchQuery
+              ? `No products found matching "${searchQuery}" in ${activeCategory}`
+              : "No products found in this category."}
+          </div>
           <div className="empty-text">
-            {isStoreOwner
+            {searchQuery
+              ? "Try adjusting your search keyword, check for typos, or browse the entire collection."
+              : isStoreOwner
               ? "Click '+ Add New Product' above to stock your store!"
               : "Check back soon for new arrivals."}
           </div>
+          {searchQuery && (
+            <button
+              className="primary"
+              onClick={handleClearSearch}
+              style={{ marginTop: "18px", padding: "10px 24px", borderRadius: "25px" }}
+            >
+              Clear Search & Show All
+            </button>
+          )}
         </div>
       )}
 

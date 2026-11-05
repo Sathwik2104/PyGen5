@@ -207,15 +207,23 @@ export async function fetchUserProfile(token) {
  */
 
 /**
- * Fetch products, optionally filtered by category ('Men', 'Women', 'All')
+ * Fetch products, optionally filtered by category ('Men', 'Women', 'All') and keyword search
  * @param {string} category
+ * @param {string} search
  */
-export async function fetchProducts(category = "All") {
+export async function fetchProducts(category = "All", search = "") {
   const cleanCat = category ? category.trim() : "All";
-  const url =
-    cleanCat && cleanCat !== "All"
-      ? `${API_BASE_URL}/products/?category=${encodeURIComponent(cleanCat)}`
-      : `${API_BASE_URL}/products/`;
+  const params = new URLSearchParams();
+
+  if (cleanCat && cleanCat !== "All") {
+    params.append("category", cleanCat);
+  }
+  if (search && search.trim()) {
+    params.append("search", search.trim());
+  }
+
+  const queryString = params.toString();
+  const url = queryString ? `${API_BASE_URL}/products/?${queryString}` : `${API_BASE_URL}/products/`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -466,12 +474,16 @@ export async function fetchStoreRevenue(period = "all", token, year = null, mont
  * @param {string} token
  */
 export async function fetchStoreConfig(token) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_BASE_URL}/store/config/`, {
     method: "GET",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
 
   const resData = await response.json();

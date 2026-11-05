@@ -160,6 +160,8 @@ function MainContent() {
         <Info
           title="About TryWise"
           text="TryWise bridges digital browsing and physical shopping. Discover collections, Bag It, then visit the store to try and confidently choose what you love."
+          goProducts={goProducts}
+          setPage={setPage}
         />
       )}
 

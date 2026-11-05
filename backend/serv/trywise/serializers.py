@@ -297,7 +297,17 @@ class ResetPasswordSerializer(serializers.Serializer):
 class StoreConfigurationSerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreConfiguration
-        fields = ('trial_duration_value', 'trial_duration_unit', 'updated_at')
+        fields = (
+            'store_name',
+            'address',
+            'landmark',
+            'hours',
+            'phone',
+            'email',
+            'trial_duration_value',
+            'trial_duration_unit',
+            'updated_at'
+        )
         read_only_fields = ('updated_at',)
 
     def validate_trial_duration_value(self, value):
