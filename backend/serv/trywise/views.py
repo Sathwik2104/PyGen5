@@ -7,6 +7,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.core import signing
 from django.db import transaction
 from django.db.models import Sum, Q
+from django.db.models.functions import Lower
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -634,12 +635,21 @@ class ProductListCreateView(APIView):
         products = Product.objects.all()
 
         if category and category.lower() != 'all':
-            products = products.filter(category__iexact=category)
+            products = products.annotate(
+                cat_lower=Lower('category')
+            ).filter(cat_lower=category.lower())
 
         if search:
-            products = products.filter(
-                Q(name__icontains=search) | Q(category__icontains=search)
+            search_lower = search.lower()
+            keywords = [w.strip() for w in search_lower.split() if w.strip()]
+            products = products.annotate(
+                name_lower=Lower('name'),
+                cat_search_lower=Lower('category'),
             )
+            for kw in keywords:
+                products = products.filter(
+                    Q(name_lower__contains=kw) | Q(cat_search_lower__contains=kw)
+                )
 
         serializer = ProductSerializer(products, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)

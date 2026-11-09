@@ -84,13 +84,16 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   // Manual search submit (Search button or Enter key - instant execution)
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
-    setSearchQuery(searchInput.trim());
+    const trimmed = searchInput.trim();
+    setSearchQuery(trimmed);
+    loadProducts(activeCategory, trimmed);
   };
 
   // Clear search and reset list
   const handleClearSearch = () => {
     setSearchInput("");
     setSearchQuery("");
+    loadProducts(activeCategory, "");
   };
 
   // Handle customer choosing a size
