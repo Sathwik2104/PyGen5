@@ -16,6 +16,7 @@ from .views import (
     OrderDetailView,
     StoreRevenueView,
     StoreConfigurationView,
+    ChatAssistantView,
 )
 
 urlpatterns = [
@@ -44,6 +45,9 @@ urlpatterns = [
 
     # Store Owner Dynamic Trial Policy
     path('store/config/', StoreConfigurationView.as_view(), name='store-config'),
+
+    # AI & FAQ Shopping Assistant (Customer only)
+    path('chat/', ChatAssistantView.as_view(), name='chat-assistant'),
 ]
 
 

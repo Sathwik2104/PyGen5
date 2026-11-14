@@ -14,7 +14,15 @@ import { recordProductVisit } from "../services/recentHistory.js";
  *   use inline [+] / [-] buttons to instantly adjust stock, edit product info/prices,
  *   add new products, or delete items.
  */
-export default function Products({ category, setCategory, addToCart, onOpenAddProduct, onOpenLogin }) {
+export default function Products({
+  category,
+  setCategory,
+  addToCart,
+  onOpenAddProduct,
+  onOpenLogin,
+  searchQuery: externalSearchQuery = "",
+  setSearchQuery: setExternalSearchQuery,
+}) {
   const { user, tokens } = useAuth();
   const isStoreOwner = user?.role === "store_owner";
 
@@ -36,8 +44,16 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   const [stockUpdating, setStockUpdating] = useState({});
 
   // Search state: typed input & active debounced/submitted search query
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(externalSearchQuery || "");
+  const [searchQuery, setSearchQuery] = useState(externalSearchQuery || "");
+
+  // Synchronize when external search query changes (e.g. from Chatbot recommendation link)
+  useEffect(() => {
+    if (externalSearchQuery !== undefined && externalSearchQuery !== searchQuery) {
+      setSearchInput(externalSearchQuery);
+      setSearchQuery(externalSearchQuery);
+    }
+  }, [externalSearchQuery]);
 
   const activeCategory =
     typeof category === "string" && (category === "Women" || category === "Men")
@@ -69,7 +85,11 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   // Live type-ahead: 250ms debounce as user types
   useEffect(() => {
     const timer = setTimeout(() => {
-      setSearchQuery(searchInput.trim());
+      const trimmed = searchInput.trim();
+      setSearchQuery(trimmed);
+      if (setExternalSearchQuery && externalSearchQuery !== trimmed) {
+        setExternalSearchQuery(trimmed);
+      }
     }, 250);
     return () => clearTimeout(timer);
   }, [searchInput]);
@@ -86,6 +106,9 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
     if (e) e.preventDefault();
     const trimmed = searchInput.trim();
     setSearchQuery(trimmed);
+    if (setExternalSearchQuery) {
+      setExternalSearchQuery(trimmed);
+    }
     loadProducts(activeCategory, trimmed);
   };
 
@@ -93,6 +116,9 @@ export default function Products({ category, setCategory, addToCart, onOpenAddPr
   const handleClearSearch = () => {
     setSearchInput("");
     setSearchQuery("");
+    if (setExternalSearchQuery) {
+      setExternalSearchQuery("");
+    }
     loadProducts(activeCategory, "");
   };
 
