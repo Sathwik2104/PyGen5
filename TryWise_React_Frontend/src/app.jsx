@@ -5,6 +5,7 @@ import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import LoginModal from "./components/LoginModal.jsx";
 import AddProductModal from "./components/AddProductModal.jsx";
+import Chatbot from "./components/Chatbot.jsx";
 import Home from "./pages/Home.jsx";
 import Products from "./pages/Products.jsx";
 import Cart from "./pages/Cart.jsx";
@@ -19,6 +20,7 @@ function MainContent() {
   const [addProductModal, setAddProductModal] = useState(false);
   const [page, setPage] = useState("home");
   const [category, setCategory] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -30,6 +32,7 @@ function MainContent() {
       if (postLoginIntent.page === "products") {
         const cat = postLoginIntent.category || "All";
         setCategory(cat);
+        setSearchQuery(postLoginIntent.search || "");
         setPage("products");
       } else if (postLoginIntent.page === "cart") {
         setPage("cart");
@@ -60,7 +63,7 @@ function MainContent() {
     return () => clearInterval(interval);
   }, [user, tokens]);
 
-  const goProducts = (targetCategory = "All") => {
+  const goProducts = (targetCategory = "All", initialSearch = "") => {
     const cat =
       typeof targetCategory === "string" &&
       (targetCategory === "Women" || targetCategory === "Men")
@@ -68,12 +71,13 @@ function MainContent() {
         : "All";
 
     if (!user) {
-      setPostLoginIntent({ page: "products", category: cat });
+      setPostLoginIntent({ page: "products", category: cat, search: initialSearch });
       setLoginModal("customer");
       return;
     }
 
     setCategory(cat);
+    setSearchQuery(initialSearch || "");
     setPage("products");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -138,6 +142,8 @@ function MainContent() {
         <Products
           category={category}
           setCategory={setCategory}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
           addToCart={addToCart}
           onOpenAddProduct={() => setAddProductModal(true)}
           onOpenLogin={setLoginModal}
@@ -162,6 +168,15 @@ function MainContent() {
           text="TryWise bridges digital browsing and physical shopping. Discover collections, Bag It, then visit the store to try and confidently choose what you love."
           goProducts={goProducts}
           setPage={setPage}
+        />
+      )}
+
+      {/* INTELLIGENT SHOPPING ASSISTANT & FAQ CHATBOT (Only for logged-in Customers) */}
+      {user && user.role === "customer" && (
+        <Chatbot
+          addToCart={addToCart}
+          goProducts={goProducts}
+          onOpenLogin={setLoginModal}
         />
       )}
 

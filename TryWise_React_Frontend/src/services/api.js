@@ -207,11 +207,13 @@ export async function fetchUserProfile(token) {
  */
 
 /**
- * Fetch products, optionally filtered by category ('Men', 'Women', 'All') and keyword search
+ * Fetch products, optionally filtered by category ('Men', 'Women', 'All'), keyword search, and price range
  * @param {string} category
  * @param {string} search
+ * @param {number|null} maxPrice
+ * @param {number|null} minPrice
  */
-export async function fetchProducts(category = "All", search = "") {
+export async function fetchProducts(category = "All", search = "", maxPrice = null, minPrice = null) {
   const cleanCat = category ? category.trim() : "All";
   const params = new URLSearchParams();
 
@@ -220,6 +222,12 @@ export async function fetchProducts(category = "All", search = "") {
   }
   if (search && search.trim()) {
     params.append("search", search.trim());
+  }
+  if (maxPrice !== null && maxPrice !== undefined && !isNaN(maxPrice)) {
+    params.append("max_price", maxPrice);
+  }
+  if (minPrice !== null && minPrice !== undefined && !isNaN(minPrice)) {
+    params.append("min_price", minPrice);
   }
 
   const queryString = params.toString();
@@ -517,6 +525,38 @@ export async function updateStoreConfig(data, token) {
         .join(" | ") ||
       "Failed to update store configuration.";
     throw new Error(errorMsg);
+  }
+  return resData;
+}
+
+/**
+ * ==============================================================================
+ * SHOPPING ASSISTANT & CHATBOT APIS (CUSTOMER ONLY)
+ * ==============================================================================
+ */
+
+/**
+ * Send customer message to the TryWise Assistant API
+ * @param {string} message - Customer input prompt
+ * @param {string} token - Customer JWT access token
+ */
+export async function sendChatMessage(message, token) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/chat/`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ message }),
+  });
+
+  const resData = await response.json();
+  if (!response.ok) {
+    throw new Error(resData.detail || "Failed to communicate with assistant.");
   }
   return resData;
 }

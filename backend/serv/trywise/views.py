@@ -1,5 +1,8 @@
 import logging
 import random
+import json
+import re
+import urllib.request
 from datetime import timedelta
 
 from django.conf import settings
@@ -632,6 +635,8 @@ class ProductListCreateView(APIView):
     def get(self, request):
         category = request.query_params.get('category', None)
         search = request.query_params.get('search', '').strip()
+        min_price = request.query_params.get('min_price', None)
+        max_price = request.query_params.get('max_price', None)
         products = Product.objects.all()
 
         if category and category.lower() != 'all':
@@ -650,6 +655,18 @@ class ProductListCreateView(APIView):
                 products = products.filter(
                     Q(name_lower__contains=kw) | Q(cat_search_lower__contains=kw)
                 )
+
+        if min_price:
+            try:
+                products = products.filter(price__gte=float(min_price))
+            except ValueError:
+                pass
+
+        if max_price:
+            try:
+                products = products.filter(price__lte=float(max_price))
+            except ValueError:
+                pass
 
         serializer = ProductSerializer(products, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1326,4 +1343,305 @@ class StoreConfigurationView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ==============================================================================
+# SHOPPING ASSISTANT & FAQ CHATBOT VIEW (GROQ CLOUD AI + HYBRID CATALOG ENGINE)
+# ==============================================================================
+
+def parse_budget_and_query_server(text):
+    """
+    Local regex parser for budget ceilings, category detection, and keyword extraction.
+    Used for instant local fallback if Groq is offline or API key is not configured.
+    """
+    raw = text.lower()
+    max_price = None
+    min_price = None
+
+    def parse_amt(val_str):
+        if not val_str:
+            return None
+        val_str = val_str.strip().lower()
+        if val_str.endswith('k'):
+            try:
+                return float(val_str[:-1]) * 1000
+            except ValueError:
+                return None
+        try:
+            return float(val_str)
+        except ValueError:
+            return None
+
+    max_match = (
+        re.search(r'(?:under|below|less\s+than|within|upto|up\s+to|max|budget)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', raw, re.IGNORECASE) or
+        re.search(r'<=\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', raw) or
+        re.search(r'<\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', raw)
+    )
+    if max_match:
+        max_price = parse_amt(max_match.group(1))
+
+    min_match = (
+        re.search(r'(?:above|over|more\s+than|min|at\s+least)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', raw, re.IGNORECASE) or
+        re.search(r'>=\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', raw) or
+        re.search(r'>\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', raw)
+    )
+    if min_match:
+        min_price = parse_amt(min_match.group(1))
+
+    category = 'All'
+    if re.search(r'\b(men|mens|male|gentlemen|boy|boys)\b', raw) and not re.search(r'\bwomen\b', raw):
+        category = 'Men'
+    elif re.search(r'\b(women|womens|female|ladies|girl|girls)\b', raw):
+        category = 'Women'
+
+    clean = re.sub(r'(?:under|below|less\s+than|within|upto|up\s+to|max|budget|above|over|more\s+than|min|at\s+least)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', ' ', raw, flags=re.IGNORECASE)
+    clean = re.sub(r'[<>=]\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', ' ', clean)
+    clean = re.sub(r'\b(men|mens|women|womens|collection|products|product|items|item|clothes|clothing|wear|options|show|me|find|get|give|looking|for|want|need|i|the|a|an|in|of|with|please|best|cheap|affordable|any)\b', ' ', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+
+    return max_price, min_price, category, clean
+
+
+class ChatAssistantView(APIView):
+    """
+    POST: Processes customer shopping, fashion advice, and trial inquiries.
+    Restricted: Available exclusively to authenticated Customers.
+    Architecture:
+      1. Tier 1 (Static FAQs): Matches policy queries (Bag It, hold window, hours, address,
+         payments, returns) with 0ms latency and 0 API cost.
+      2. Tier 2 (Occasion / Styling / Complex Recommendations): Calls Groq Cloud AI
+         (OpenAI-compatible REST endpoint via standard urllib) with catalog context and structured JSON output.
+         Groq provides 14,400 free requests per day with near-instant ~200ms latency.
+      3. Tier 3 (Catalog Search): Retrieves matching live Product objects from database
+         and returns them formatted for interactive size selection and "+ Bag It" actions.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != UserRole.CUSTOMER:
+            return Response(
+                {'detail': 'The shopping assistant is available exclusively to registered customers.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        message = request.data.get('message', '').strip()
+        if not message:
+            return Response({'detail': 'Message cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ----------------------------------------------------------------------
+        # TIER 1: FAST POLICY & FAQ MATCHING (0ms latency, 0 API tokens)
+        # ----------------------------------------------------------------------
+        lower = message.lower()
+
+        # Load store config for live hours, address, hold duration
+        store_config = StoreConfiguration.objects.first()
+        hold_val = store_config.trial_duration_value if store_config else getattr(settings, 'TRIAL_RESERVATION_HOURS', 24)
+        hold_unit = store_config.trial_duration_unit if store_config else 'hours'
+        hold_text = f"{hold_val} {hold_unit}"
+
+        # 1. How Bag It Works
+        if any(k in lower for k in ['how bag it works', 'how does bag it work', 'what is bag it', 'how it works', 'explain bag it', 'trial work']):
+            reply = (
+                "🛍️ **How Bag It Works in 4 Easy Steps:**\n\n"
+                "1. **Select Your Size & Tap '+ Bag It':** Browse any item and add it to your Bag It list online. You pay **₹0 online**!\n\n"
+                "2. **Store Holds Your Clothes:** Our in-store staff retrieves your reserved sizes and keeps them safely set aside in our fitting room trial area.\n\n"
+                "3. **Visit The Store:** Come to our store within the trial hold window to try on your garments in private fitting rooms.\n\n"
+                "4. **Pay Only For What You Love:** Take home what fits and flatters you, pay at the counter (Cash, UPI, Card), and leave the rest behind—zero hassle!"
+            )
+            return Response({'reply': reply, 'products': [], 'source': 'faq'}, status=status.HTTP_200_OK)
+
+        # 2. Hold Duration / Reservation Window
+        if any(k in lower for k in ['hold window', 'hold time', 'how long', 'time limit', 'duration', 'expire', 'reservation']):
+            reply = (
+                f"⏱️ **Trial Reservation Hold Window:**\n\n"
+                f"When the store accepts your Bag It request, your items are reserved exclusively for you for **{hold_text}**.\n\n"
+                f"• Your hold countdown starts immediately upon store confirmation.\n"
+                f"• Please visit our store before the timer expires to try on your pieces.\n"
+                f"• If the hold period passes without a visit, the items are automatically released back to public shelves."
+            )
+            return Response({'reply': reply, 'products': [], 'source': 'faq'}, status=status.HTTP_200_OK)
+
+        # 3. Store Location & Hours
+        if any(k in lower for k in ['location', 'address', 'where are you', 'where is the store', 'landmark', 'hours', 'timing', 'when are you open', 'phone', 'contact', 'email']):
+            store_name = store_config.store_name if (store_config and store_config.store_name) else "TryWise Fashion Studio & Trial Store"
+            address = store_config.address if (store_config and store_config.address) else "100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038"
+            landmark = store_config.landmark if (store_config and store_config.landmark) else "Near Indiranagar Metro Station"
+            hours = store_config.hours if (store_config and store_config.hours) else "Monday – Sunday: 10:00 AM – 9:00 PM (Daily)"
+            phone = store_config.phone if (store_config and store_config.phone) else "+91 98765 43210"
+            email = store_config.email if (store_config and store_config.email) else "support@trywise.shop"
+            reply = (
+                f"📍 **{store_name}**\n\n"
+                f"• **Address:** {address}\n"
+                f"• **Landmark:** {landmark}\n"
+                f"• **Hours:** {hours}\n"
+                f"• **Phone:** {phone}\n"
+                f"• **Email:** {email}\n\n"
+                f"💡 *Tip: Head over to our **About** page to see the interactive Google Map and launch 1-click GPS driving directions!*"
+            )
+            return Response({'reply': reply, 'products': [], 'source': 'faq'}, status=status.HTTP_200_OK)
+
+        # 4. Payment
+        if any(k in lower for k in ['payment', 'how to pay', 'online payment', 'pay online', 'free', 'cost online', 'cash', 'upi', 'card']):
+            reply = (
+                "💳 **Zero-Risk In-Store Payment:**\n\n"
+                "• **Online Cost:** **₹0.00**. TryWise never asks for credit card numbers, CVVs, or UPI payments online.\n"
+                "• **In-Store Payment:** After you've tried on your reserved garments and decided what looks best on you, simply proceed to checkout.\n"
+                "• We accept **Cash, UPI (Google Pay, PhonePe, Paytm), and all Credit/Debit cards** in-store."
+            )
+            return Response({'reply': reply, 'products': [], 'source': 'faq'}, status=status.HTTP_200_OK)
+
+        # 5. Returns & Exchanges
+        if any(k in lower for k in ['return', 'exchange', 'refund', 'policy', 'fit issue']):
+            reply = (
+                "🔄 **Try-Before-You-Buy & Exchanges:**\n\n"
+                "Because you try on every piece in our store fitting rooms before buying, size and fit disappointments are virtually eliminated!\n\n"
+                "• If you ever need an exchange after purchasing, bring the unworn product with intact tags and store receipt within **7 days**."
+            )
+            return Response({'reply': reply, 'products': [], 'source': 'faq'}, status=status.HTTP_200_OK)
+
+        # ----------------------------------------------------------------------
+        # TIER 2: GROQ CLOUD AI REASONING (Llama 3.3 / 3.1 Occasion & Styling)
+        # ----------------------------------------------------------------------
+        groq_api_key = getattr(settings, 'GROQ_API_KEY', '').strip()
+        groq_model = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile').strip()
+
+        ai_reply = None
+        filter_category = "All"
+        filter_search = ""
+        filter_max_price = None
+
+        if groq_api_key:
+            try:
+                system_instruction = (
+                    "You are TryWise Shopping Assistant, a chic, friendly, and helpful AI fashion advisor for TryWise.\n"
+                    "About TryWise: Customers browse clothing online, select their size, and tap '+ Bag It' to hold items for an in-store trial for free (₹0 online payment). "
+                    "They try them in physical fitting rooms and only pay for what they like at the counter.\n"
+                    "Categories: Men, Women.\n"
+                    "Inventory includes linen shirts, casual & formal shirts, denim jackets, cotton trousers, floral dresses, etc.\n\n"
+                    "Instructions:\n"
+                    "1. Respond conversationally with friendly, practical styling advice, occasion suggestions, or answers (2-3 sentences max).\n"
+                    "2. Extract or infer clothing search filters to help us display matching products from our catalog.\n"
+                    "3. Respond ONLY in a JSON object with this exact structure:\n"
+                    "{\n"
+                    "  \"reply\": \"Your conversational advice here...\",\n"
+                    "  \"filters\": {\n"
+                    "    \"category\": \"Men\" | \"Women\" | \"All\",\n"
+                    "    \"search\": \"keyword like linen, shirt, dress, jacket (or empty string)\",\n"
+                    "    \"max_price\": number or null\n"
+                    "  }\n"
+                    "}"
+                )
+
+                payload = {
+                    "model": groq_model,
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": message}
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "max_tokens": 1200
+                }
+
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode('utf-8'),
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Authorization': f'Bearer {groq_api_key}',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                    },
+                    method='POST'
+                )
+
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    res_body = response.read().decode('utf-8')
+                    res_json = json.loads(res_body)
+                    choices = res_json.get('choices', [])
+                    if choices:
+                        content_text = choices[0].get('message', {}).get('content', '')
+                        parsed = json.loads(content_text)
+                        ai_reply = parsed.get('reply')
+                        filters = parsed.get('filters', {})
+                        raw_cat = str(filters.get('category', 'All')).strip()
+                        if raw_cat.lower() in ['men', 'man', 'male', 'boy']:
+                            filter_category = 'Men'
+                        elif raw_cat.lower() in ['women', 'woman', 'female', 'ladies', 'girl']:
+                            filter_category = 'Women'
+                        else:
+                            filter_category = 'All'
+
+                        filter_search = str(filters.get('search', '')).strip()
+                        filter_max_price = filters.get('max_price')
+            except Exception as e:
+                logger.warning("Groq Cloud AI call failed or timed out: %s. Falling back to local catalog parser.", e)
+
+        # ----------------------------------------------------------------------
+        # TIER 3: CATALOG SEARCH & PRODUCT RETRIEVAL
+        # ----------------------------------------------------------------------
+        # If Groq didn't supply filters, use local regex parser as reliable fallback
+        if not ai_reply:
+            parsed_budget, parsed_min, parsed_cat, parsed_kw = parse_budget_and_query_server(message)
+            filter_category = parsed_cat
+            filter_search = parsed_kw
+            filter_max_price = parsed_budget
+
+        # Query database for matching products
+        products = Product.objects.all()
+
+        if filter_category and filter_category.lower() != 'all':
+            products = products.annotate(cat_lower=Lower('category')).filter(cat_lower=filter_category.lower())
+
+        if filter_max_price:
+            try:
+                products = products.filter(price__lte=float(filter_max_price))
+            except (ValueError, TypeError):
+                pass
+
+        if filter_search:
+            keywords = [w.strip() for w in filter_search.lower().split() if w.strip()]
+            products = products.annotate(name_lower=Lower('name'), cat_search_lower=Lower('category'))
+            for kw in keywords:
+                products = products.filter(Q(name_lower__contains=kw) | Q(cat_search_lower__contains=kw))
+
+        # If keyword was too restrictive and returned 0 products, broaden to category / budget
+        if not products.exists() and (filter_max_price or filter_category != 'All'):
+            broadened = Product.objects.all()
+            if filter_category and filter_category.lower() != 'all':
+                broadened = broadened.annotate(cat_lower=Lower('category')).filter(cat_lower=filter_category.lower())
+            if filter_max_price:
+                try:
+                    broadened = broadened.filter(price__lte=float(filter_max_price))
+                except (ValueError, TypeError):
+                    pass
+            if broadened.exists():
+                products = broadened
+
+        serialized_products = ProductSerializer(products[:8], many=True, context={'request': request}).data
+
+        if not ai_reply:
+            if serialized_products:
+                cat_desc = f" in {filter_category}" if filter_category != 'All' else ""
+                price_desc = f" under ₹{int(filter_max_price):,}" if filter_max_price else ""
+                kw_desc = f" for '{filter_search}'" if filter_search else ""
+                ai_reply = (
+                    f"✨ I found **{len(serialized_products)}** recommended item{'s' if len(serialized_products) != 1 else ''}{cat_desc}{kw_desc}{price_desc}! "
+                    f"Pick your size and tap **+ Bag It** to reserve for your in-store trial:"
+                )
+            else:
+                ai_reply = (
+                    f"I couldn't find items matching your exact request. Try searching for other keywords (like *'linen'*, *'shirt'*, or *'dress'*) or raising your budget ceiling."
+                )
+
+        return Response({
+            'reply': ai_reply,
+            'products': serialized_products,
+            'filters': {
+                'category': filter_category,
+                'search': filter_search,
+                'max_price': filter_max_price
+            },
+            'source': 'groq' if (groq_api_key and ai_reply) else 'catalog'
+        }, status=status.HTTP_200_OK)
+
 
