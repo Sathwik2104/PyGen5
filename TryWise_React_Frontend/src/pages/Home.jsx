@@ -19,7 +19,8 @@ export default function Home({
   useEffect(() => {
     const loadShowcase = async () => {
       if (user && user.role === "customer") {
-        const recent = getRecentProducts();
+        const userKey = user.id || user.email;
+        const recent = getRecentProducts(userKey);
         if (recent && recent.length > 0) {
           let items = [...recent];
           // If customer has only 1 visited item, fill a second item from catalog for the layered back card
