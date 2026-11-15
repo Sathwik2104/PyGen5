@@ -8,6 +8,7 @@ import {
   resendLoginOtp,
   forgotPassword,
   resetPassword,
+  loginWithGoogle,
 } from "../services/api.js";
 
 export default function LoginModal({ type, close, setLoginModal }) {
@@ -46,6 +47,93 @@ export default function LoginModal({ type, close, setLoginModal }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+
+  // Handle Google OAuth Credential callback
+  const handleGoogleCredentialResponse = async (response) => {
+    if (!response || !response.credential) {
+      setError("Google authentication was cancelled or failed to return credentials.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await loginWithGoogle(response.credential);
+      setAuthData(data.user, data.tokens);
+      const name = data.user?.first_name || data.user?.username || "there";
+      showToast(`Welcome to TryWise, ${name}! Signed in with Google.`, "success");
+      close();
+    } catch (err) {
+      setError(err.message || "Failed to sign in with Google.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Render Google Identity Services button for Customer views
+  useEffect(() => {
+    const isCustomerView =
+      currentView === "customer" ||
+      (currentView === "register" && formData.role === "customer");
+
+    if (!isCustomerView) return;
+
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const renderGoogleBtn = () => {
+      const container = document.getElementById("google-signin-btn-container");
+      if (!container) return false;
+
+      if (!GOOGLE_CLIENT_ID) {
+        container.innerHTML = `
+          <div class="google-auth-hint">
+            <span>✨ Google Sign-In available once client ID is configured</span>
+          </div>
+        `;
+        return true;
+      }
+
+      if (!window.google?.accounts?.id) {
+        return false;
+      }
+
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredentialResponse,
+        });
+
+        container.innerHTML = "";
+        window.google.accounts.id.renderButton(container, {
+          theme: "outline",
+          size: "medium",
+          width: 230,
+          text: currentView === "register" ? "signup_with" : "signin_with",
+          shape: "rectangular",
+          logo_alignment: "left",
+        });
+        return true;
+      } catch (err) {
+        console.error("Failed to render Google Sign-In button:", err);
+        return true;
+      }
+    };
+
+    if (!renderGoogleBtn()) {
+      const interval = setInterval(() => {
+        attempts += 1;
+        if (renderGoogleBtn() || attempts >= maxAttempts) {
+          clearInterval(interval);
+        }
+      }, 150);
+
+      return () => clearInterval(interval);
+    }
+  }, [currentView, formData.role, GOOGLE_CLIENT_ID]);
 
   // Cooldown timer effect for OTP resend
   useEffect(() => {
@@ -733,6 +821,16 @@ export default function LoginModal({ type, close, setLoginModal }) {
                 : "Sign In"}
             </button>
           </form>
+        )}
+
+        {/* GOOGLE SIGN IN (FOR CUSTOMERS ONLY) */}
+        {(currentView === "customer" || (currentView === "register" && formData.role === "customer")) && (
+          <div className="google-auth-section">
+            <div className="auth-divider">
+              <span>OR</span>
+            </div>
+            <div id="google-signin-btn-container" className="google-signin-wrapper"></div>
+          </div>
         )}
 
         {/* BOTTOM SWITCH LINKS */}

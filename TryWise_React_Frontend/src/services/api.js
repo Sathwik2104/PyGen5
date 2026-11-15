@@ -181,6 +181,26 @@ export async function resetPassword(data) {
 }
 
 /**
+ * Authenticate customer with Google OAuth credential ID token
+ * @param {string} idToken - Signed Google JWT credential token
+ */
+export async function loginWithGoogle(idToken) {
+  const response = await fetch(`${API_BASE_URL}/auth/google/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id_token: idToken }),
+  });
+
+  const resData = await response.json();
+  if (!response.ok) {
+    throw new Error(resData.detail || "Google authentication failed.");
+  }
+  return resData;
+}
+
+/**
  * Fetch authenticated user profile using JWT token
  * @param {string} token
  */
