@@ -271,6 +271,9 @@ TRIAL_RESERVATION_MINUTES = float(trial_minutes_env) if trial_minutes_env else N
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '').strip()
 GROQ_MODEL = os.environ.get('GROQ_MODEL', 'openai/gpt-oss-120b').strip()
 
+# Google OAuth Configuration (Google Identity Services)
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
+
 
 
 

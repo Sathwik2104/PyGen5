@@ -524,6 +524,94 @@ class ResendLoginOTPView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class GoogleLoginView(APIView):
+    """
+    POST: Authenticates or registers a Customer via verified Google ID token.
+    Uses Google's official tokeninfo endpoint to verify token signature & audience.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        id_token = request.data.get('id_token', '').strip()
+        if not id_token:
+            return Response({'detail': 'Google ID token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate token with Google's tokeninfo endpoint
+        google_client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '').strip()
+        try:
+            url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                token_info = json.loads(resp.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8')
+            logger.warning("Google token verification failed: %s", err_body)
+            return Response({'detail': 'Invalid or expired Google token.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception("Error verifying Google token: %s", e)
+            return Response({'detail': 'Failed to verify Google token.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Audience check (if GOOGLE_CLIENT_ID configured)
+        token_aud = token_info.get('aud')
+        if google_client_id and token_aud != google_client_id:
+            logger.warning("Google token audience mismatch: expected %s, got %s", google_client_id, token_aud)
+            return Response({'detail': 'Google token audience mismatch.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = token_info.get('email', '').strip().lower()
+        if not email:
+            return Response({'detail': 'Email not provided by Google account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        email_verified = token_info.get('email_verified') in [True, 'true', 'True']
+        if not email_verified:
+            return Response({'detail': 'Google email is not verified.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find or create Customer
+        user = User.objects.filter(email=email).first()
+
+        if user:
+            # If user already exists:
+            # If user is a store owner, require standard 2FA login for security
+            if user.role == UserRole.STORE_OWNER:
+                return Response(
+                    {'detail': 'This email is registered to a Store Owner account. Please sign in via the Store Owner portal.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        else:
+            # Create new customer
+            given_name = token_info.get('given_name', '')
+            family_name = token_info.get('family_name', '')
+            base_username = email.split('@')[0]
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            user = User.objects.create(
+                username=username,
+                email=email,
+                first_name=given_name,
+                last_name=family_name,
+                role=UserRole.CUSTOMER,
+                is_active=True
+            )
+            user.set_unusable_password()
+            user.save()
+
+        # Issue JWT tokens
+        tokens = get_tokens_for_user(user)
+        user_data = UserSerializer(user).data
+
+        return Response({
+            'message': 'Google authentication successful',
+            'user': user_data,
+            'tokens': tokens,
+        }, status=status.HTTP_200_OK)
+
+
 class ForgotPasswordView(APIView):
     """
     POST: Initiates password reset by emailing a 6-digit reset code.
