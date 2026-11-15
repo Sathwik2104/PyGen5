@@ -158,7 +158,7 @@ export default function Chatbot({ addToCart, goProducts, onOpenLogin }) {
       return;
     }
 
-    recordProductVisit(product);
+    recordProductVisit(product, user?.id || user?.email);
 
     addToCart({
       productId: product.id,

@@ -128,7 +128,7 @@ export default function Products({
       ...prev,
       [product.id]: size,
     }));
-    recordProductVisit(product);
+    recordProductVisit(product, user?.id || user?.email);
   };
 
   // Store Owner: Quick inline stock adjustment
@@ -338,7 +338,7 @@ export default function Products({
               <div
                 className={`product-img-box ${product.image ? "clickable" : ""}`}
                 onClick={() => {
-                  recordProductVisit(product);
+                  recordProductVisit(product, user?.id || user?.email);
                   if (product.image) {
                     setPreviewImage({
                       url: product.image,
@@ -487,7 +487,7 @@ export default function Products({
                     {/* + BAG IT BUTTON */}
                     <button
                       onClick={() => {
-                        recordProductVisit(product);
+                        recordProductVisit(product, user?.id || user?.email);
                         addToCart({
                           productId: product.id,
                           name: product.name,
