@@ -242,4 +242,34 @@ class StoreConfiguration(models.Model):
         return f"StoreConfig for {self.owner.username}: {self.trial_duration_value} {self.trial_duration_unit}"
 
 
+class CustomerCartItem(models.Model):
+    """
+    Persistent Cloud Cart for authenticated customers (Approach A).
+    Enables customers to add items to their bag on one device (e.g. desktop),
+    and view/manage/reserve them when logging in from any other device (e.g. mobile).
+    """
+    customer = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='cart_items'
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='in_carts'
+    )
+    size = models.CharField(max_length=5)  # 'S', 'M', 'L', 'XL'
+    quantity = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('customer', 'product', 'size')
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"{self.customer.username} - {self.product.name} ({self.size} x {self.quantity})"
+
+
+
 

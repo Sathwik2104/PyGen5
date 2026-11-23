@@ -376,6 +376,104 @@ export async function deleteProduct(productId, token) {
 
 /**
  * ==============================================================================
+ * CLOUD CART APIS (APPROACH A: PERSISTENT CROSS-DEVICE BAG IT)
+ * ==============================================================================
+ */
+
+/**
+ * Fetch persistent cloud cart items for authenticated customer
+ * @param {string} token
+ */
+export async function fetchCart(token) {
+  if (!token) return [];
+  try {
+    const response = await fetch(`${API_BASE_URL}/cart/`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+    return await response.json();
+  } catch (err) {
+    console.warn("Could not fetch cloud cart:", err);
+    return [];
+  }
+}
+
+/**
+ * Add or update item in customer's persistent cloud cart
+ * @param {Object} itemData - { productId, size, quantity, set_exact }
+ * @param {string} token
+ */
+export async function addToCloudCart(itemData, token) {
+  if (!token) return;
+  const response = await fetch(`${API_BASE_URL}/cart/`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      productId: itemData.productId,
+      size: itemData.size,
+      quantity: itemData.quantity || 1,
+      set_exact: itemData.set_exact || false,
+    }),
+  });
+
+  if (!response.ok) {
+    const resData = await response.json();
+    throw new Error(resData.detail || "Failed to update cloud cart.");
+  }
+  return await response.json();
+}
+
+/**
+ * Remove single item size from customer's cloud cart
+ * @param {number} productId
+ * @param {string} size
+ * @param {string} token
+ */
+export async function removeFromCloudCart(productId, size, token) {
+  if (!token) return;
+  const response = await fetch(`${API_BASE_URL}/cart/?product_id=${productId}&size=${size}`, {
+    method: "DELETE",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const resData = await response.json();
+    throw new Error(resData.detail || "Failed to remove item from cloud cart.");
+  }
+  return await response.json();
+}
+
+/**
+ * Clear customer's cloud cart completely
+ * @param {string} token
+ */
+export async function clearCloudCart(token) {
+  if (!token) return;
+  const response = await fetch(`${API_BASE_URL}/cart/?clear=true`, {
+    method: "DELETE",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  return await response.json();
+}
+
+/**
+ * ==============================================================================
  * ORDER / BAG IT REQUEST APIS
  * ==============================================================================
  */

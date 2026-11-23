@@ -41,9 +41,12 @@ from .models import (
     UserRole,
     StoreConfiguration,
     TrialDurationUnit,
+    CustomerCartItem,
 )
 from .serializers import (
+    AddCartItemInputSerializer,
     CreateOrderSerializer,
+    CustomerCartItemSerializer,
     ForgotPasswordRequestSerializer,
     LoginSerializer,
     OrderSerializer,
@@ -1059,6 +1062,9 @@ class OrderListCreateView(APIView):
                         is_restocked=False
                     )
 
+                # Clear persistent cloud cart upon successful order placement
+                CustomerCartItem.objects.filter(customer=request.user).delete()
+
             # Send email alert to store owners
             try:
                 send_new_order_email_to_owners(order)
@@ -1286,6 +1292,93 @@ class OrderDetailView(APIView):
 
 
 # ==============================================================================
+# CUSTOMER CLOUD CART VIEWS (APPROACH A: CROSS-DEVICE PERSISTENCE)
+# ==============================================================================
+
+class CartView(APIView):
+    """
+    Persistent Cloud Cart for Customers (Approach A):
+    Allows customers to add items to their bag on one device (e.g. desktop),
+    and view/manage/reserve them when logging in from any other device (e.g. mobile).
+    GET: List all persistent cart items for the authenticated customer.
+    POST: Add or update item quantity in customer's persistent cloud cart.
+    DELETE: Remove a specific item or clear entire cart.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        items = CustomerCartItem.objects.filter(customer=request.user).select_related('product')
+        serializer = CustomerCartItemSerializer(items, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = AddCartItemInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        product_id = serializer.validated_data['resolved_product_id']
+        size = serializer.validated_data['size'].upper()
+        quantity = serializer.validated_data.get('quantity', 1)
+        set_exact = serializer.validated_data.get('set_exact', False)
+
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response({'detail': f'Product #{product_id} not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        size_col = f"size_{size.lower()}"
+        available_stock = getattr(product, size_col, 0)
+
+        cart_item, created = CustomerCartItem.objects.get_or_create(
+            customer=request.user,
+            product=product,
+            size=size,
+            defaults={'quantity': quantity}
+        )
+
+        if not created:
+            if set_exact:
+                new_qty = quantity
+            else:
+                new_qty = cart_item.quantity + quantity
+
+            if available_stock and new_qty > available_stock:
+                new_qty = available_stock
+
+            if new_qty <= 0:
+                cart_item.delete()
+            else:
+                cart_item.quantity = new_qty
+                cart_item.save(update_fields=['quantity', 'updated_at'])
+
+        items = CustomerCartItem.objects.filter(customer=request.user).select_related('product')
+        out_serializer = CustomerCartItemSerializer(items, many=True, context={'request': request})
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        clear = request.query_params.get('clear', 'false').lower() in ('true', '1')
+        if clear:
+            CustomerCartItem.objects.filter(customer=request.user).delete()
+            return Response([], status=status.HTTP_200_OK)
+
+        product_id = request.query_params.get('product_id') or request.query_params.get('productId')
+        size = request.query_params.get('size', '').upper()
+
+        if not product_id or not size:
+            return Response({'detail': 'product_id and size are required to delete item.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        CustomerCartItem.objects.filter(
+            customer=request.user,
+            product_id=product_id,
+            size=size
+        ).delete()
+
+        items = CustomerCartItem.objects.filter(customer=request.user).select_related('product')
+        out_serializer = CustomerCartItemSerializer(items, many=True, context={'request': request})
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+
+# ==============================================================================
 # STORE REVENUE & ANALYTICS VIEW
 # ==============================================================================
 
@@ -1484,7 +1577,7 @@ def parse_budget_and_query_server(text):
 
     clean = re.sub(r'(?:under|below|less\s+than|within|upto|up\s+to|max|budget|above|over|more\s+than|min|at\s+least)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', ' ', raw, flags=re.IGNORECASE)
     clean = re.sub(r'[<>=]\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)', ' ', clean)
-    clean = re.sub(r'\b(men|mens|women|womens|collection|products|product|items|item|clothes|clothing|wear|options|show|me|find|get|give|looking|for|want|need|i|the|a|an|in|of|with|please|best|cheap|affordable|any)\b', ' ', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'\b(men|mens|women|womens|collection|products|product|items|item|clothes|clothing|wear|options|show|me|find|get|give|looking|for|want|need|i|the|a|an|in|of|with|please|best|cheap|affordable|any|party|wedding|formal|casual|office|festive|traditional|gym|workout|summer|winter|spring|autumn|vibe|vibes|look|looks)\b', ' ', clean, flags=re.IGNORECASE)
     clean = re.sub(r'\s+', ' ', clean).strip()
 
     return max_price, min_price, category, clean
@@ -1617,7 +1710,9 @@ class ChatAssistantView(APIView):
                     "    \"search\": \"keyword like linen, shirt, dress, jacket (or empty string)\",\n"
                     "    \"max_price\": number or null\n"
                     "  }\n"
-                    "}"
+                    "}\n"
+                    "4. IMPORTANT: Do NOT put occasion/lifestyle words (such as 'party', 'wedding', 'formal', 'casual', 'office', 'festive', 'traditional', 'summer', 'winter') in the 'search' filter. "
+                    "The 'search' filter matches directly against product names. For occasion or lifestyle requests, set 'category' ('Men' or 'Women') and set 'search' to an empty string '' (or a specific garment type if mentioned, like 'shirt', 'blazer', 'trousers', 'dress'), so that the customer can browse the full matching collection in the catalog without 0-result errors."
                 )
 
                 payload = {
@@ -1704,6 +1799,14 @@ class ChatAssistantView(APIView):
                     pass
             if broadened.exists():
                 products = broadened
+                # When keyword returned 0 literal title matches and we broadened,
+                # clear filter_search so frontend doesn't lock the search bar to a keyword with 0 matches
+                filter_search = ''
+        elif not products.exists() and filter_search:
+            # If search keyword (e.g. occasion term like "party") yielded 0 products across catalog,
+            # fall back to all available products and clear filter_search
+            products = Product.objects.all()
+            filter_search = ''
 
         serialized_products = ProductSerializer(products[:8], many=True, context={'request': request}).data
 

@@ -18,6 +18,7 @@ from .views import (
     StoreRevenueView,
     StoreConfigurationView,
     ChatAssistantView,
+    CartView,
 )
 
 urlpatterns = [
@@ -41,6 +42,9 @@ urlpatterns = [
     # Bag It / Order Endpoints
     path('orders/', OrderListCreateView.as_view(), name='order-list-create'),
     path('orders/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
+
+    # Customer Persistent Cloud Cart (Approach A: Cross-Device Sync)
+    path('cart/', CartView.as_view(), name='customer-cart'),
 
     # Store Owner Revenue & Analytics
     path('store/revenue/', StoreRevenueView.as_view(), name='store-revenue'),

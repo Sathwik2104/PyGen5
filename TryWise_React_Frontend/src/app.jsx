@@ -11,7 +11,7 @@ import Products from "./pages/Products.jsx";
 import Cart from "./pages/Cart.jsx";
 import StoreRequests from "./pages/StoreRequests.jsx";
 import Info from "./pages/Info.jsx";
-import { fetchOrders } from "./services/api.js";
+import { fetchOrders, fetchCart, addToCloudCart } from "./services/api.js";
 import "./style.css";
 
 function MainContent() {
@@ -63,6 +63,21 @@ function MainContent() {
     return () => clearInterval(interval);
   }, [user, tokens]);
 
+  // Approach A: Cross-device persistent Bag It cart sync for customers
+  useEffect(() => {
+    if (user?.role === "customer" && tokens?.access) {
+      fetchCart(tokens.access)
+        .then((cloudCart) => {
+          if (cloudCart && Array.isArray(cloudCart) && cloudCart.length > 0) {
+            setCart(cloudCart);
+          }
+        })
+        .catch((err) => console.warn("Failed to sync cloud cart across devices:", err));
+    } else if (!user) {
+      setCart([]);
+    }
+  }, [user, tokens]);
+
   const goProducts = (targetCategory = "All", initialSearch = "") => {
     const cat =
       typeof targetCategory === "string" &&
@@ -111,6 +126,13 @@ function MainContent() {
 
       return [...currentCart, { ...item, quantity: 1 }];
     });
+
+    // Approach A: Save to cloud cart so items are preserved across other devices
+    if (tokens?.access) {
+      addToCloudCart(item, tokens.access).catch((err) =>
+        console.warn("Failed to sync item to cloud cart:", err)
+      );
+    }
   };
 
   return (
