@@ -577,6 +577,92 @@ class ProductOrderAndRevenueAPITests(TestCase):
         self.assertIn("Ready to Try On", mail.outbox[-1].subject)
 
 
+class CustomerCartAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.cart_url = reverse('customer-cart')
+        self.orders_url = reverse('order-list-create')
+
+        self.owner = User.objects.create_user(
+            username='owner_cart_test',
+            email='owner_cart_test@example.com',
+            password='Password123!',
+            role=UserRole.STORE_OWNER,
+            is_active=True
+        )
+        self.customer = User.objects.create_user(
+            username='cartuser',
+            email='cartuser@example.com',
+            password='Password123!',
+            role=UserRole.CUSTOMER,
+            is_active=True
+        )
+        self.product = Product.objects.create(
+            created_by=self.owner,
+            name='Summer Linen Shirt',
+            price=1499.00,
+            category='Men',
+            size_s=5,
+            size_m=10,
+            size_l=8,
+            size_xl=2
+        )
+
+    def test_customer_cart_cross_device_persistence(self):
+        self.client.force_authenticate(user=self.customer)
+
+        # 1. Device A: Add item to cart
+        add_res = self.client.post(self.cart_url, {
+            'productId': self.product.id,
+            'size': 'M',
+            'quantity': 2
+        }, format='json')
+        self.assertEqual(add_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(add_res.data), 1)
+        self.assertEqual(add_res.data[0]['size'], 'M')
+        self.assertEqual(add_res.data[0]['quantity'], 2)
+
+        # 2. Device B (simulated by fresh client authenticated as same customer): Fetch cart
+        device_b_client = APIClient()
+        device_b_client.force_authenticate(user=self.customer)
+        get_res = device_b_client.get(self.cart_url)
+        self.assertEqual(get_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(get_res.data), 1)
+        self.assertEqual(get_res.data[0]['name'], 'Summer Linen Shirt')
+        self.assertEqual(get_res.data[0]['productId'], self.product.id)
+
+        # 3. Increase quantity
+        inc_res = device_b_client.post(self.cart_url, {
+            'productId': self.product.id,
+            'size': 'M',
+            'quantity': 1
+        }, format='json')
+        self.assertEqual(inc_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(inc_res.data[0]['quantity'], 3)
+
+        # 4. Remove single item
+        del_res = device_b_client.delete(f"{self.cart_url}?productId={self.product.id}&size=M")
+        self.assertEqual(del_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(del_res.data), 0)
+
+        # 5. Order submission clears cloud cart
+        device_b_client.post(self.cart_url, {
+            'productId': self.product.id,
+            'size': 'S',
+            'quantity': 1
+        }, format='json')
+
+        order_res = device_b_client.post(self.orders_url, {
+            'items': [{'product_id': self.product.id, 'size': 'S', 'quantity': 1}]
+        }, format='json')
+        self.assertEqual(order_res.status_code, status.HTTP_201_CREATED)
+
+        # Ensure cloud cart is now empty
+        final_cart_res = device_b_client.get(self.cart_url)
+        self.assertEqual(len(final_cart_res.data), 0)
+
+
+
 
 
 

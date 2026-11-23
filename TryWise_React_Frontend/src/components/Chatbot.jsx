@@ -238,7 +238,7 @@ export default function Chatbot({ addToCart, goProducts, onOpenLogin }) {
     let clean = raw
       .replace(/(?:under|below|less\s+than|within|upto|up\s+to|max|budget|above|over|more\s+than|min|at\s+least)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)/gi, " ")
       .replace(/[<>=]\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?k?|\d+)/gi, " ")
-      .replace(/\b(men|mens|women|womens|collection|products|product|items|item|clothes|clothing|wear|options|show|me|find|get|give|looking|for|want|need|i|the|a|an|in|of|with|please|best|cheap|affordable|any)\b/gi, " ")
+      .replace(/\b(men|mens|women|womens|collection|products|product|items|item|clothes|clothing|wear|options|show|me|find|get|give|looking|for|want|need|i|the|a|an|in|of|with|please|best|cheap|affordable|any|party|wedding|formal|casual|office|festive|traditional|gym|workout|summer|winter|spring|autumn|vibe|vibes|look|looks)\b/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -807,7 +807,11 @@ export default function Chatbot({ addToCart, goProducts, onOpenLogin }) {
                               }
                             }}
                           >
-                            Explore all matching items in Products Tab ↗
+                            {msg.filterMeta.search
+                              ? `Explore all "${msg.filterMeta.search}" items in Products Tab ↗`
+                              : msg.filterMeta.category && msg.filterMeta.category !== "All"
+                              ? `Explore ${msg.filterMeta.category}'s Collection in Products Tab ↗`
+                              : "Explore all matching items in Products Tab ↗"}
                           </button>
                         </div>
                       )}

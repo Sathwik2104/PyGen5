@@ -144,7 +144,7 @@ export default function Header({
                       setProfileOpen(false);
                     }}
                   >
-                    My Bag It
+                    My Bag & Requests
                   </button>
                 )}
 
